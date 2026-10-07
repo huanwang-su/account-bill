@@ -1,0 +1,85 @@
+{
+  "$defs": {
+    "RefundDecision": {
+      "additionalProperties": false,
+      "properties": {
+        "refund_id": {
+          "title": "Refund Id",
+          "type": "string"
+        },
+        "payment_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Payment Id"
+        },
+        "decision": {
+          "enum": [
+            "MATCHED",
+            "UNMATCHED"
+          ],
+          "title": "Decision",
+          "type": "string"
+        },
+        "note": {
+          "maxLength": 1000,
+          "minLength": 1,
+          "title": "Note",
+          "type": "string"
+        },
+        "matched_by": {
+          "maxLength": 80,
+          "minLength": 1,
+          "title": "Matched By",
+          "type": "string"
+        }
+      },
+      "required": [
+        "refund_id",
+        "decision",
+        "note",
+        "matched_by"
+      ],
+      "title": "RefundDecision",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": {
+      "const": "local-ledger.refund-matches.v1",
+      "default": "local-ledger.refund-matches.v1",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "run_id": {
+      "title": "Run Id",
+      "type": "integer"
+    },
+    "candidates_digest": {
+      "title": "Candidates Digest",
+      "type": "string"
+    },
+    "decisions": {
+      "items": {
+        "$ref": "#/$defs/RefundDecision"
+      },
+      "maxItems": 20000,
+      "title": "Decisions",
+      "type": "array"
+    }
+  },
+  "required": [
+    "run_id",
+    "candidates_digest",
+    "decisions"
+  ],
+  "title": "RefundReviewDocument",
+  "type": "object"
+}

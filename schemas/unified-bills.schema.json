@@ -1,0 +1,216 @@
+{
+  "$defs": {
+    "BillClassification": {
+      "additionalProperties": false,
+      "properties": {
+        "category_path": {
+          "items": {
+            "type": "string"
+          },
+          "maxItems": 5,
+          "minItems": 1,
+          "title": "Category Path",
+          "type": "array"
+        },
+        "tags": {
+          "items": {
+            "type": "string"
+          },
+          "maxItems": 12,
+          "title": "Tags",
+          "type": "array"
+        },
+        "status": {
+          "enum": [
+            "CLASSIFIED",
+            "NEEDS_REVIEW"
+          ],
+          "title": "Status",
+          "type": "string"
+        },
+        "review_scope": {
+          "default": "UNSPECIFIED",
+          "enum": [
+            "CATEGORY",
+            "TRANSACTION",
+            "ACCOUNT",
+            "AMOUNT",
+            "DUPLICATE",
+            "UNSPECIFIED"
+          ],
+          "title": "Review Scope",
+          "type": "string"
+        },
+        "note": {
+          "default": "",
+          "maxLength": 1000,
+          "title": "Note",
+          "type": "string"
+        },
+        "classified_by": {
+          "maxLength": 80,
+          "minLength": 1,
+          "title": "Classified By",
+          "type": "string"
+        }
+      },
+      "required": [
+        "category_path",
+        "status",
+        "classified_by"
+      ],
+      "title": "BillClassification",
+      "type": "object"
+    },
+    "BillFacts": {
+      "additionalProperties": false,
+      "properties": {
+        "occurred_at": {
+          "maxLength": 32,
+          "title": "Occurred At",
+          "type": "string"
+        },
+        "amount_minor": {
+          "maximum": 100000000000000,
+          "minimum": 0,
+          "title": "Amount Minor",
+          "type": "integer"
+        },
+        "currency": {
+          "const": "CNY",
+          "default": "CNY",
+          "title": "Currency",
+          "type": "string"
+        },
+        "flow": {
+          "enum": [
+            "IN",
+            "OUT",
+            "UNSPECIFIED"
+          ],
+          "title": "Flow",
+          "type": "string"
+        },
+        "settlement": {
+          "enum": [
+            "COMPLETED",
+            "AWAITING_RECEIPT",
+            "REFUNDED",
+            "CLOSED",
+            "UNKNOWN"
+          ],
+          "title": "Settlement",
+          "type": "string"
+        },
+        "counterparty": {
+          "maxLength": 2000,
+          "title": "Counterparty",
+          "type": "string"
+        },
+        "description": {
+          "maxLength": 10000,
+          "title": "Description",
+          "type": "string"
+        },
+        "payment_hint": {
+          "maxLength": 2000,
+          "title": "Payment Hint",
+          "type": "string"
+        }
+      },
+      "required": [
+        "occurred_at",
+        "amount_minor",
+        "flow",
+        "settlement",
+        "counterparty",
+        "description",
+        "payment_hint"
+      ],
+      "title": "BillFacts",
+      "type": "object"
+    },
+    "BillRecord": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "maxLength": 200,
+          "minLength": 1,
+          "title": "Id",
+          "type": "string"
+        },
+        "revision": {
+          "default": 0,
+          "minimum": 0,
+          "title": "Revision",
+          "type": "integer"
+        },
+        "bill_status": {
+          "default": "NORMAL",
+          "enum": [
+            "NORMAL",
+            "IGNORED",
+            "LINKED"
+          ],
+          "title": "Bill Status",
+          "type": "string"
+        },
+        "facts": {
+          "$ref": "#/$defs/BillFacts"
+        },
+        "classification": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/BillClassification"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        }
+      },
+      "required": [
+        "id",
+        "facts"
+      ],
+      "title": "BillRecord",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": {
+      "const": "local-ledger.bills.v1",
+      "default": "local-ledger.bills.v1",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "bills": {
+      "items": {
+        "$ref": "#/$defs/BillRecord"
+      },
+      "maxItems": 20000,
+      "title": "Bills",
+      "type": "array"
+    },
+    "ai_reference": {
+      "anyOf": [
+        {
+          "additionalProperties": true,
+          "type": "object"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Ai Reference"
+    }
+  },
+  "required": [
+    "bills"
+  ],
+  "title": "BillDocument",
+  "type": "object"
+}
