@@ -3,7 +3,14 @@
 import json
 from sqlalchemy import func
 from .domain import Clock, DomainError
-from .models import Account, AccountGroup, AccountMergeEvent, Entry, AccountAlias
+from .models import (
+    Account,
+    AccountGroup,
+    AccountMergeEvent,
+    Entry,
+    AccountAlias,
+    Transaction,
+)
 
 
 class AccountGraph:
@@ -29,12 +36,15 @@ class AccountGraph:
             a.id for a in self.accounts.values() if self.canonical(a.id).id == target
         }
 
-    def balances(self, session):
-        raw = dict(
-            session.query(Entry.account_id, func.sum(Entry.amount)).group_by(
-                Entry.account_id
-            )
-        )
+    def balances(self, session, as_of=None):
+        query = session.query(Entry.account_id, func.sum(Entry.amount))
+        if as_of is not None:
+            query = query.join(
+                Transaction, Transaction.id == Entry.transaction_id
+            ).filter(Transaction.occurred_at <= as_of)
+        # Keep both original and reversing entries: dropping reversed transactions
+        # would count only the reversal and produce the wrong balance.
+        raw = dict(query.group_by(Entry.account_id))
         totals = {}
         for key, amount in raw.items():
             canonical = self.canonical(key).id

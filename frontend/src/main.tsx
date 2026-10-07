@@ -61,6 +61,7 @@ import { CatalogWorkspace } from "./CatalogWorkspace";
 import { AccountWorkspace } from "./AccountWorkspace";
 import { AccountSettings } from "./AccountSettings";
 import { ClassificationSettings } from "./ClassificationSettings";
+import { BalanceSheetWorkspace } from "./BalanceSheetWorkspace";
 
 const kindNames: Row = {
   EXPENSE: "支出",
@@ -409,6 +410,14 @@ class LedgerApp extends React.Component<{}, State> {
           <span>账面净资产</span>
           <strong>¥ {Money.format(total)}</strong>
           <small>自有资产与负债 · 全部时间</small>
+          <Button
+            className="balance-overview-link"
+            type="link"
+            size="small"
+            onClick={() => this.setState({ page: "balance-sheet" })}
+          >
+            查看资产负债表 <ArrowRightOutlined />
+          </Button>
         </div>
         <div className="metric">
           <span>
@@ -1082,7 +1091,7 @@ class LedgerApp extends React.Component<{}, State> {
           <Card title="关于这个账本">
             <Descriptions column={1}>
               <Descriptions.Item label="版本">
-                0.12.0 · 本地单用户版
+                0.13.0 · 本地单用户版
               </Descriptions.Item>
               <Descriptions.Item label="币种">人民币 CNY</Descriptions.Item>
               <Descriptions.Item label="时间">
@@ -1613,6 +1622,7 @@ class LedgerApp extends React.Component<{}, State> {
   render() {
     const nav = [
       ["overview", "总览", <AppstoreOutlined />],
+      ["balance-sheet", "资产负债表", <BarChartOutlined />],
       ["accounts", "账户管理", <WalletOutlined />],
       ["bills", "交易明细", <FileDoneOutlined />],
       ["transactions", "账户流水", <SwapOutlined />],
@@ -1625,6 +1635,7 @@ class LedgerApp extends React.Component<{}, State> {
     const subtitles: Row = {
       bills: "已导入的统一账单，按流水号追溯。",
       overview: "看清每笔收支，让生活心中有数。",
+      "balance-sheet": "按账户组查看资产、负债与净资产。",
       accounts: "按家庭和个人分组，查看账户归属与余额。",
       transactions: "每一笔变动，都有迹可循。",
       imports: "从一份账单，整理你的日常。",
@@ -1717,6 +1728,15 @@ class LedgerApp extends React.Component<{}, State> {
               />
             ) : this.state.page === "overview" ? (
               this.renderOverview()
+            ) : this.state.page === "balance-sheet" ? (
+              <BalanceSheetWorkspace
+                groups={this.state.groups}
+                refreshKey={JSON.stringify([
+                  this.state.accounts,
+                  this.state.groups,
+                ])}
+                onAccounts={() => this.setState({ page: "accounts" })}
+              />
             ) : this.state.page === "accounts" ? (
               this.renderAccounts()
             ) : this.state.page === "transactions" ? (
@@ -1734,7 +1754,7 @@ class LedgerApp extends React.Component<{}, State> {
             )}
           </div>
           <footer>
-            有数 · 每一笔，都算数 <span>本地账本 v0.12</span>
+            有数 · 每一笔，都算数 <span>本地账本 v0.13</span>
           </footer>
         </main>
         <Modal

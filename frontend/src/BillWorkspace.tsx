@@ -20,6 +20,7 @@ import {
 } from "antd";
 import { PagedTable } from "./PagedTable";
 import { BillAssociationDialog } from "./BillAssociationDialog";
+import { BillSorter, BillSortOrder } from "./BillSorter";
 import { DownloadOutlined } from "@ant-design/icons";
 import {
   LedgerApi,
@@ -70,6 +71,8 @@ interface State {
   groups: Row[];
   categories: Row[];
   tags: Row[];
+  sortField: string;
+  sortOrder: BillSortOrder;
 }
 /** Reusable provider-independent bill viewer and offline classification workflow. */
 export class BillWorkspace extends React.Component<Props, State> {
@@ -84,6 +87,8 @@ export class BillWorkspace extends React.Component<Props, State> {
     groups: [],
     categories: [],
     tags: [],
+    sortField: "occurred_at",
+    sortOrder: "descend",
   };
   componentDidMount() {
     this.load();
@@ -258,6 +263,12 @@ export class BillWorkspace extends React.Component<Props, State> {
   }
   render() {
     const { rows, filters, editing, detail } = this.state;
+    const sorting = (key: string) => ({
+      key,
+      sorter: true,
+      sortOrder: this.state.sortField === key ? this.state.sortOrder : null,
+      sortDirections: ["ascend", "descend", "ascend"] as BillSortOrder[],
+    });
     const classified = rows.filter((r) => r.classification).length;
     const tags = [
       ...new Set([
@@ -400,13 +411,50 @@ export class BillWorkspace extends React.Component<Props, State> {
             </Space>
           }
         >
+          <Space className="bill-sort-controls" wrap>
+            <span className="muted">排序</span>
+            <Select
+              aria-label="交易排序字段"
+              value={this.state.sortField}
+              style={{ width: 150 }}
+              options={BillSorter.fields}
+              onChange={(sortField) => this.setState({ sortField })}
+            />
+            <Select
+              aria-label="交易排序方向"
+              value={this.state.sortOrder}
+              style={{ width: 110 }}
+              options={[
+                { value: "descend", label: "降序" },
+                { value: "ascend", label: "升序" },
+              ]}
+              onChange={(sortOrder) => this.setState({ sortOrder })}
+            />
+            <small className="muted">点击表头也可切换排序</small>
+          </Space>
           <PagedTable
             rowKey="id"
             loading={this.state.loading}
-            dataSource={this.filtered}
+            dataSource={BillSorter.sort(
+              this.filtered,
+              this.state.sortField,
+              this.state.sortOrder,
+            )}
             scroll={{ x: 1170 }}
             defaultPageSize={15}
-            pageResetKey={JSON.stringify(filters)}
+            pageResetKey={JSON.stringify([
+              filters,
+              this.state.sortField,
+              this.state.sortOrder,
+            ])}
+            onChange={(_, __, sorter) => {
+              const selected = Array.isArray(sorter) ? sorter[0] : sorter;
+              if (selected.columnKey && selected.order)
+                this.setState({
+                  sortField: String(selected.columnKey),
+                  sortOrder: selected.order,
+                });
+            }}
             locale={{
               emptyText: (
                 <Empty description="请在账单导入页完成分类并导入交易明细" />
@@ -415,6 +463,7 @@ export class BillWorkspace extends React.Component<Props, State> {
             columns={[
               {
                 title: "交易对方 / 时间",
+                ...sorting("occurred_at"),
                 width: 190,
                 render: (_: unknown, r: Row) => (
                   <>
@@ -432,6 +481,7 @@ export class BillWorkspace extends React.Component<Props, State> {
               },
               {
                 title: "描述",
+                ...sorting("description"),
                 width: 200,
                 render: (_: unknown, r: Row) => (
                   <div className="bill-description">
@@ -441,6 +491,7 @@ export class BillWorkspace extends React.Component<Props, State> {
               },
               {
                 title: "金额 / 方向",
+                ...sorting("amount"),
                 width: 120,
                 align: "right",
                 render: (_: unknown, r: Row) => (
@@ -471,6 +522,7 @@ export class BillWorkspace extends React.Component<Props, State> {
               },
               {
                 title: "资金账户",
+                ...sorting("account"),
                 width: 150,
                 render: (_: unknown, r: Row) => (
                   <>
@@ -490,6 +542,7 @@ export class BillWorkspace extends React.Component<Props, State> {
               },
               {
                 title: "分类 / 标签",
+                ...sorting("category"),
                 width: 200,
                 render: (_: unknown, r: Row) => (
                   <>
@@ -509,6 +562,7 @@ export class BillWorkspace extends React.Component<Props, State> {
               },
               {
                 title: "分类状态",
+                ...sorting("classification_status"),
                 width: 110,
                 render: (_: unknown, r: Row) => (
                   <>

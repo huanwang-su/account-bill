@@ -1019,3 +1019,57 @@ footer span {
   max-height: 760px;
   overflow-y: auto;
 }
+/* Financial position uses a wide, readable desktop statement layout. */
+.bill-sort-controls {
+  margin-bottom: 18px;
+}
+.balance-sheet-metrics {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 20px;
+  margin-bottom: 24px;
+}
+.balance-sheet-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 24px;
+  align-items: start;
+}
+.balance-sheet-grid .ant-card {
+  min-width: 0;
+}
+.balance-sheet-grid .ant-table-cell {
+  overflow-wrap: anywhere;
+}
+.balance-group-row > td {
+  background: #f4f7f1 !important;
+  font-weight: 600;
+}
+.balance-account-note {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 8px;
+  margin-top: 6px;
+}
+.balance-negative {
+  color: #ac5638;
+}
+.balance-equation {
+  margin-top: 24px;
+  padding: 18px 24px;
+  border: 1px solid #dfe6d9;
+  border-radius: 12px;
+  background: #f4f7f1;
+  font-size: 16px;
+  font-weight: 600;
+}
+.balance-sheet-note {
+  margin-top: 16px;
+  line-height: 1.8;
+}
+.balance-overview-link.ant-btn {
+  display: block;
+  padding: 0;
+  margin-top: 8px;
+  color: inherit;
+}
