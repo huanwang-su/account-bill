@@ -1149,6 +1149,27 @@ footer span {
 .analysis-note {
   line-height: 1.8;
 }
+.counterparty-charts {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.2fr);
+  gap: 22px;
+}
+.counterparty-valuation-summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 20px;
+  margin-bottom: 20px;
+  color: #7d8c82;
+}
+.counterparty-valuation-summary b {
+  display: block;
+  margin-top: 7px;
+  color: #315d48;
+  font-size: 20px;
+}
+.counterparty-workspace .ant-table-cell {
+  overflow-wrap: anywhere;
+}
 .analysis-trend .chart {
   height: 340px;
 }

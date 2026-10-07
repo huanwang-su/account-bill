@@ -30,6 +30,7 @@ interface Props {
   onEdit: (kind: string, account: Row) => void;
   onTransactions: (filters: Row) => void;
   onConfigure: () => void;
+  onAnalyse: (account: Row) => void;
 }
 
 /** Ownership hierarchy uses canonical accounts once; group totals include descendants. */
@@ -180,12 +181,21 @@ export class AccountWorkspace extends React.Component<
             trigger={["click"]}
             menu={{
               items: [
+                ...(["ASSET", "LIABILITY"].includes(a.role)
+                  ? [{ key: "counterparties", label: "交易方分析" }]
+                  : []),
+                ...(a.kind === "证券" && a.role === "ASSET" && a.active
+                  ? [{ key: "valuation", label: "更新证券余额" }]
+                  : []),
                 ...(!a.opening_set
                   ? [{ key: "opening", label: "设置期初" }]
                   : []),
                 { key: "reconcile", label: "账户对账" },
               ],
-              onClick: ({ key }) => this.props.onEdit(key, a),
+              onClick: ({ key }) =>
+                key === "counterparties"
+                  ? this.props.onAnalyse(a)
+                  : this.props.onEdit(key, a),
             }}
           >
             <Button

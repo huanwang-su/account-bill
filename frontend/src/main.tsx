@@ -64,6 +64,7 @@ import { ClassificationSettings } from "./ClassificationSettings";
 import { BalanceSheetWorkspace } from "./BalanceSheetWorkspace";
 import { FinancialAnalysisWorkspace } from "./FinancialAnalysisWorkspace";
 import { Chart } from "./Chart";
+import { CounterpartyWorkspace } from "./CounterpartyWorkspace";
 
 const kindNames: Row = {
   EXPENSE: "支出",
@@ -86,6 +87,7 @@ const states: Row = {
 interface State {
   page: string;
   reportTab: string;
+  counterpartyAccountId?: number;
   accounts: Row[];
   groups: Row[];
   categories: Row[];
@@ -196,6 +198,8 @@ class LedgerApp extends React.Component<{}, State> {
     );
   }
   open(modal: string, editing?: Row, kind = "EXPENSE", catalogInitial?: Row) {
+    if (modal === "valuation")
+      this.valuationSubmissionKey = crypto.randomUUID();
     this.setState({
       modal,
       editing,
@@ -207,6 +211,7 @@ class LedgerApp extends React.Component<{}, State> {
   get tree() {
     return new CategoryTree(this.state.categories);
   }
+  valuationSubmissionKey = "";
   get accountsOptions() {
     return this.state.accounts
       .filter((a) => a.role !== "SYSTEM" && a.active)
@@ -266,6 +271,11 @@ class LedgerApp extends React.Component<{}, State> {
         path = `/accounts/${editing!.id}/reconcile`;
         data.at = values.at.format("YYYY-MM-DD HH:mm:ss");
       }
+      if (modal === "valuation") {
+        path = `/accounts/${editing!.id}/valuations`;
+        data.occurred_at = values.occurred_at.format("YYYY-MM-DD HH:mm:ss");
+        data.idempotency_key = this.valuationSubmissionKey;
+      }
       if (modal === "decision") {
         path = `/import-rows/${editing!.id}`;
         method = "PUT";
@@ -294,6 +304,14 @@ class LedgerApp extends React.Component<{}, State> {
             </Descriptions>
           ),
         });
+      else if (modal === "valuation")
+        message.success(
+          result.baseline
+            ? "首次余额已记为期初基准"
+            : result.change === 0
+              ? "余额已记录，无盈亏变动"
+              : `已生成${result.change > 0 ? "收益" : "亏损"}交易 ¥ ${Money.format(Math.abs(result.change))}`,
+        );
       else message.success("已保存");
       await this.refresh();
     } catch (e) {
@@ -710,6 +728,13 @@ class LedgerApp extends React.Component<{}, State> {
           })
         }
         onEdit={(kind, account) => this.open(kind, account)}
+        onAnalyse={(account) =>
+          this.setState({
+            page: "reports",
+            reportTab: "counterparties",
+            counterpartyAccountId: account.id,
+          })
+        }
         onTransactions={(filters) =>
           this.setState({ page: "transactions", filters }, () => this.refresh())
         }
@@ -1066,6 +1091,19 @@ class LedgerApp extends React.Component<{}, State> {
             ),
           },
           {
+            key: "counterparties",
+            label: "交易方分析",
+            children: (
+              <CounterpartyWorkspace
+                accounts={this.state.accounts}
+                initialAccountId={this.state.counterpartyAccountId}
+                refreshKey={refreshKey}
+                onDetail={(row) => this.open("detail", row)}
+                onValuation={(account) => this.open("valuation", account)}
+              />
+            ),
+          },
+          {
             key: "details",
             label: "统计明细",
             children: this.renderReportDetails(),
@@ -1144,7 +1182,7 @@ class LedgerApp extends React.Component<{}, State> {
           <Card title="关于这个账本">
             <Descriptions column={1}>
               <Descriptions.Item label="版本">
-                0.15.0 · 本地单用户版
+                0.16.0 · 本地单用户版
               </Descriptions.Item>
               <Descriptions.Item label="币种">人民币 CNY</Descriptions.Item>
               <Descriptions.Item label="时间">
@@ -1275,6 +1313,12 @@ class LedgerApp extends React.Component<{}, State> {
       initial = { amount: "0.00", occurred_at: dayjs().startOf("month") };
     if (modal === "reconcile")
       initial = { at: dayjs(), actual: Money.input(e!.balance) };
+    if (modal === "valuation")
+      initial = {
+        occurred_at: dayjs(),
+        actual: Money.input(e!.balance),
+        note: "",
+      };
     if (modal === "decision")
       initial = {
         ...e!.decision,
@@ -1341,6 +1385,7 @@ class LedgerApp extends React.Component<{}, State> {
                     "现金",
                     "信用卡",
                     "理财",
+                    "证券",
                     "其他",
                   ].map((x) => ({ value: x, label: x }))}
                 />
@@ -1635,6 +1680,49 @@ class LedgerApp extends React.Component<{}, State> {
             </Form.Item>
           </>
         )}
+        {modal === "valuation" && (
+          <>
+            <Alert
+              className="mb"
+              type="info"
+              message={
+                e!.opening_set
+                  ? "按新总资产与已记账余额的差额，生成估值盈亏交易。"
+                  : "首次余额作为期初基准，不计算收益。已有流水时，请先补全期初。"
+              }
+              description="填写证券账户总资产（资金余额 + 持仓市值），不要只填可用资金。充值、提现先记内部转账，再更新余额；更新时间不能早于已有流水。"
+            />
+            <p>当前已记录余额：¥ {Money.format(e!.balance)}</p>
+            <Form.Item
+              name="actual"
+              label="证券账户总资产（元）"
+              rules={[{ required: true }]}
+            >
+              <InputNumber
+                stringMode
+                min="0"
+                precision={2}
+                style={{ width: "100%" }}
+              />
+            </Form.Item>
+            <Form.Item
+              name="occurred_at"
+              label="余额更新时间"
+              rules={[{ required: true }]}
+            >
+              <DatePicker
+                showTime
+                style={{ width: "100%" }}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter") event.preventDefault();
+                }}
+              />
+            </Form.Item>
+            <Form.Item name="note" label="更新备注">
+              <Input placeholder="例如：月末资产估值" />
+            </Form.Item>
+          </>
+        )}
         {modal === "reconcile" && (
           <>
             <Form.Item
@@ -1702,6 +1790,7 @@ class LedgerApp extends React.Component<{}, State> {
       transaction: this.state.editing ? "修改交易" : "记一笔",
       opening: "设置期初余额",
       reconcile: "账户对账",
+      valuation: "更新证券余额",
       decision: "确认账单记录",
       saveReport: "保存报表",
       detail: "交易详情",
@@ -1796,7 +1885,7 @@ class LedgerApp extends React.Component<{}, State> {
             )}
           </div>
           <footer>
-            有数 · 每一笔，都算数 <span>本地账本 v0.15</span>
+            有数 · 每一笔，都算数 <span>本地账本 v0.16</span>
           </footer>
         </main>
         <Modal

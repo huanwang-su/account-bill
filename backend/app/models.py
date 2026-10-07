@@ -129,6 +129,21 @@ class ImportSource(Base):
     row_id = Column(Integer, ForeignKey("import_rows.id"), nullable=False)
 
 
+class AccountValuation(Base):
+    __tablename__ = "account_valuations"
+    id = Column(Integer, primary_key=True)
+    account_id = Column(Integer, ForeignKey("accounts.id"), nullable=False, index=True)
+    occurred_at = Column(String, nullable=False)
+    recorded_at = Column(String, nullable=False)
+    actual = Column(BigInteger, nullable=False)
+    calculated = Column(BigInteger, nullable=False)
+    change = Column(BigInteger, nullable=False)
+    baseline = Column(Boolean, nullable=False, default=False)
+    transaction_id = Column(Integer, ForeignKey("transactions.id"), unique=True)
+    idempotency_key = Column(String, nullable=False, unique=True)
+    note = Column(Text, default="")
+
+
 class Reconciliation(Base):
     __tablename__ = "reconciliations"
     id = Column(Integer, primary_key=True)

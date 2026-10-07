@@ -43,7 +43,7 @@ class Database:
                     if has_version
                     else None
                 )
-            if current and current[0] != "012":
+            if current and current[0] != "013":
                 self.backup(str(self.path) + ".before-upgrade-" + current[0])
         command.upgrade(config, "head")
         with self.write() as s:

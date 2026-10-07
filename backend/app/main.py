@@ -23,6 +23,8 @@ from .transfer_matching import TransferMatchService
 from .bill_associations import BillAssociationService
 from .balance_sheet import BalanceSheetService
 from .financial_analysis import FinancialAnalysisService
+from .securities import SecuritiesValuationService
+from .counterparty_analysis import CounterpartyAnalysisService
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -42,6 +44,8 @@ class LedgerApplication:
         self.reports = ReportService(self.db)
         self.balance_sheet = BalanceSheetService(self.db)
         self.financial_analysis = FinancialAnalysisService(self.db)
+        self.securities = SecuritiesValuationService(self.db)
+        self.counterparties = CounterpartyAnalysisService(self.db)
         self.imports = ImportService(self.db)
         self.imports.link_existing_pouches()
         self.bills = BillService(self.db)
@@ -55,7 +59,7 @@ class LedgerApplication:
         self.posting.backfill()
         BillStatusService(self.db).apply_existing()
         self.lock = RLock()
-        self.app = FastAPI(title="有数 · 本地账本", version="0.15.0")
+        self.app = FastAPI(title="有数 · 本地账本", version="0.16.0")
         self.app.add_middleware(
             TrustedHostMiddleware,
             allowed_hosts=["127.0.0.1", "localhost", "testserver"],
@@ -193,6 +197,18 @@ class LedgerApplication:
         @app.post("/api/accounts/{key}/reconcile")
         def reconcile(key: int, data: dict):
             return self.accounts.reconcile(key, data)
+
+        @app.get("/api/accounts/{key}/valuations")
+        def valuations(key: int):
+            return self.securities.history(key)
+
+        @app.post("/api/accounts/{key}/valuations")
+        def update_valuation(key: int, data: dict):
+            return self.securities.update(key, data)
+
+        @app.get("/api/reports/counterparties")
+        def counterparties(request: Request, account_id: int):
+            return self.counterparties.analyze(account_id, dict(request.query_params))
 
         @app.get("/api/categories")
         def categories():

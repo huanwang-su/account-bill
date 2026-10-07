@@ -99,6 +99,8 @@ class AccountService:
             role = data.get("role", "ASSET")
             if role not in ("ASSET", "LIABILITY", "EXTERNAL"):
                 raise DomainError("账户角色不正确")
+            if data.get("kind") == "证券" and role != "ASSET":
+                raise DomainError("证券账户须设置为自有资产")
             if (
                 account_id
                 and a.role != role
