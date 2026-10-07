@@ -219,7 +219,12 @@ class LedgerApp extends React.Component<{}, State> {
         ...this.state.accounts.flatMap((a) => a.tags),
         ...this.state.transactions.flatMap((t) => t.tags),
       ]),
-    ].map((name) => ({ label: name, value: name }));
+    ]
+      .filter(
+        (name) =>
+          !this.state.tags.some((t) => t.name === name && t.active === false),
+      )
+      .map((name) => ({ label: name, value: name }));
   }
   async submit(values: Row) {
     this.setState({ busy: true });
@@ -958,6 +963,21 @@ class LedgerApp extends React.Component<{}, State> {
       <CatalogWorkspace
         categories={this.state.categories}
         tags={this.state.tags}
+        onTagActivation={async (row, active) => {
+          try {
+            await this.api.request(`/tags/${row.id}/activation`, "POST", {
+              active,
+            });
+            await this.refresh();
+            message.success(
+              active
+                ? "标签及子标签已恢复"
+                : "标签及子标签已归档，历史记录保留",
+            );
+          } catch (error) {
+            this.fail(error);
+          }
+        }}
         onOpen={(kind, row, initial) =>
           this.open(kind, row, "EXPENSE", initial)
         }
@@ -1124,7 +1144,7 @@ class LedgerApp extends React.Component<{}, State> {
           <Card title="关于这个账本">
             <Descriptions column={1}>
               <Descriptions.Item label="版本">
-                0.14.0 · 本地单用户版
+                0.15.0 · 本地单用户版
               </Descriptions.Item>
               <Descriptions.Item label="币种">人民币 CNY</Descriptions.Item>
               <Descriptions.Item label="时间">
@@ -1776,7 +1796,7 @@ class LedgerApp extends React.Component<{}, State> {
             )}
           </div>
           <footer>
-            有数 · 每一笔，都算数 <span>本地账本 v0.14</span>
+            有数 · 每一笔，都算数 <span>本地账本 v0.15</span>
           </footer>
         </main>
         <Modal

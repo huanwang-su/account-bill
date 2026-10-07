@@ -55,7 +55,7 @@ class LedgerApplication:
         self.posting.backfill()
         BillStatusService(self.db).apply_existing()
         self.lock = RLock()
-        self.app = FastAPI(title="有数 · 本地账本", version="0.14.0")
+        self.app = FastAPI(title="有数 · 本地账本", version="0.15.0")
         self.app.add_middleware(
             TrustedHostMiddleware,
             allowed_hosts=["127.0.0.1", "localhost", "testserver"],
@@ -217,6 +217,10 @@ class LedgerApplication:
         @app.put("/api/tags/{key}")
         def edit_tag(key: int, data: dict):
             return self.catalog.save_tag(data, key)
+
+        @app.post("/api/tags/{key}/activation")
+        def tag_activation(key: int, data: dict):
+            return self.catalog.set_tag_active(key, data.get("active"))
 
         @app.get("/api/transactions")
         def transactions(request: Request):

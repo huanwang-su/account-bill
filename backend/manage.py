@@ -36,6 +36,7 @@ class BackupManager:
                 "009",
                 "010",
                 "011",
+                "012",
             ):
                 raise ValueError("不支持的备份版本")
             if c.execute(

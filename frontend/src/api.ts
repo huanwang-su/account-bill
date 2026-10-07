@@ -120,6 +120,7 @@ export class TagTree extends LabelHierarchy {
       .filter(
         (r) =>
           (r.parent_id ?? null) === parent &&
+          r.active !== false &&
           !excluded.has(r.id) &&
           (!scope || r.scope === "BOTH" || r.scope === scope),
       )

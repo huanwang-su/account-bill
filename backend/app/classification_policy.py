@@ -15,6 +15,7 @@ class PolicyValues(BaseModel):
         min_length=1,
         max_length=20000,
         default="""分类最多两级，优先选择已有目录，不自动新增分类。
+分类记录收支用途；标签只补充归属、场景等信息，可选多个，不重复填写分类用途。只使用当前启用的标签目录，历史归档标签不作为新分类建议。
 按原账单实际收支方向分类，不猜测具体用途。用途不明统一归收入/未知用途或支出/未知用途，正常入账，不因缺少用途而待核对。
 已明确的自有账户转存记内部转账，不计收支；账户、金额、日期及凭证对应关系确认后，只记一笔交易。支付宝、微信通过银行卡付款时，实际扣款账户是银行卡，支付渠道不另扣余额。
 同文件退款先按订单等证据匹配原付款；全额退款双方忽略，部分退款记一笔净支出并忽略退款，累计退款不超过付款。未匹配退款按已配置口径记退款收入，分类保持“退款”。
@@ -51,7 +52,7 @@ class ClassificationPolicyService:
         categories = list(
             s.query(Category).filter_by(merged_into_id=None).order_by(Category.id)
         )
-        tags = list(s.query(Tag).order_by(Tag.id))
+        tags = list(s.query(Tag).filter_by(active=True).order_by(Tag.id))
         category_tree, tag_tree = Hierarchy(categories), Hierarchy(tags)
         return dict(
             **cls.read_in(s),

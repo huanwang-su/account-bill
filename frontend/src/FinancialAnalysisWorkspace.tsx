@@ -7,6 +7,7 @@ import {
   InputNumber,
   Select,
   Space,
+  Spin,
   Tag,
   TreeSelect,
   message,
@@ -77,7 +78,7 @@ export class FinancialAnalysisWorkspace extends React.Component<Props, State> {
         this.setState({ report, loading: false });
     } catch (error) {
       if (version === this.requestVersion) {
-        this.setState({ loading: false, report: undefined });
+        this.setState({ loading: false });
         message.error(
           error instanceof Error ? error.message : "收支分析加载失败",
         );
@@ -321,11 +322,11 @@ export class FinancialAnalysisWorkspace extends React.Component<Props, State> {
             {Money.format(report?.large_amount_minor ?? 100000)}
           </small>
         </Space>
-        {this.state.loading ? (
+        {this.state.loading && !report ? (
           <Card loading />
         ) : (
           report && (
-            <>
+            <Spin spinning={this.state.loading} tip="正在更新分析…">
               <div className="metrics analysis-metrics">
                 <div className="metric">
                   <span>收入</span>
@@ -616,7 +617,7 @@ export class FinancialAnalysisWorkspace extends React.Component<Props, State> {
               <p className="muted analysis-note">
                 仅统计有效的已入账收支，内部转账、期初余额及已撤销交易不计入；部分退款按净支出金额分析。选择父分类包含全部子分类，拆分交易按匹配部分统计。大额门槛仅影响大额分析。
               </p>
-            </>
+            </Spin>
           )
         )}
       </div>

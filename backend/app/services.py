@@ -297,7 +297,13 @@ class CatalogService:
     def tags(self):
         with self.db.read() as s:
             return [
-                dict(id=t.id, name=t.name, scope=t.scope, parent_id=t.parent_id)
+                dict(
+                    id=t.id,
+                    name=t.name,
+                    scope=t.scope,
+                    parent_id=t.parent_id,
+                    active=t.active,
+                )
                 for t in s.query(Tag).order_by(Tag.id)
             ]
 
@@ -336,6 +342,8 @@ class CatalogService:
             if parent:
                 parent = int(parent)
                 ancestor = repo.require(Tag, parent)
+                if not ancestor.active:
+                    raise DomainError("请先恢复父标签，再添加或移动子标签")
                 if tag_id and parent in hierarchy.descendants(tag_id):
                     raise DomainError("不能将标签移入自身或子标签")
                 if ancestor.scope != "BOTH" and ancestor.scope != scope:
@@ -367,6 +375,22 @@ class CatalogService:
             s.add(tag)
             s.flush()
             return {"id": tag.id}
+
+    def set_tag_active(self, tag_id, active):
+        """Archive/restore a subtree; existing account and bill labels remain intact."""
+        if not isinstance(active, bool):
+            raise DomainError("标签启用状态必须为布尔值")
+        from .taxonomy import TagHierarchy
+
+        with self.db.write() as s:
+            root = Repository(s).require(Tag, tag_id)
+            hierarchy = TagHierarchy(s)
+            if active and root.parent_id and not hierarchy.rows[root.parent_id].active:
+                raise DomainError("请先恢复父标签")
+            keys = hierarchy.descendants(tag_id)
+            for key in keys:
+                hierarchy.rows[key].active = active
+            return dict(id=tag_id, active=active, count=len(keys))
 
 
 class TransactionService:

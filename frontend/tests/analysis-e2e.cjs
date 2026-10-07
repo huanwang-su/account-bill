@@ -148,10 +148,32 @@ const server = spawn(
         .getByText("餐饮 / 买菜", { exact: true }),
     ).toBeVisible();
     await page
+      .locator(".analysis-category-title")
+      .evaluate((el) => el.scrollIntoView({ block: "start" }));
+    const scrollBefore = await page.evaluate(() => window.scrollY);
+    expect(scrollBefore).toBeGreaterThan(200);
+    await page.route("**/api/reports/analysis?**", async (route) => {
+      await new Promise((resolve) => setTimeout(resolve, 600));
+      await route.continue();
+    });
+    await page
       .locator(".financial-analysis-workspace")
       .getByRole("button", { name: "餐饮 / 买菜", exact: true })
       .click();
+    await expect(page.locator(".ant-spin-spinning")).toBeVisible();
+    expect(await page.evaluate(() => window.scrollY)).toBeGreaterThan(
+      scrollBefore - 80,
+    );
+    await expect(
+      page
+        .getByRole("img", { name: "收入支出净收支趋势曲线", exact: true })
+        .locator("canvas"),
+    ).toHaveCount(1);
     await expect(page.getByTestId("analysis-expense")).toHaveText("¥ 20.00");
+    expect(await page.evaluate(() => window.scrollY)).toBeGreaterThan(
+      scrollBefore - 80,
+    );
+    await page.unroute("**/api/reports/analysis?**");
     await expect(page.getByTestId("analysis-income")).toHaveText("¥ 0.00");
     await page.getByRole("button", { name: "重置条件", exact: true }).click();
     await expect(page.getByTestId("analysis-expense")).toHaveText("¥ 2,770.00");

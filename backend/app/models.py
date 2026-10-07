@@ -63,6 +63,7 @@ class Tag(Base):
     name = Column(String, nullable=False, unique=True)
     parent_id = Column(Integer, ForeignKey("tags.id"), index=True)
     scope = Column(String, nullable=False, default="BOTH")
+    active = Column(Boolean, nullable=False, default=True)
     __table_args__ = (CheckConstraint("scope IN ('ACCOUNT','TRANSACTION','BOTH')"),)
 
 

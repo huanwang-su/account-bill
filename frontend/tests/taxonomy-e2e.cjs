@@ -192,6 +192,72 @@ const api = async (p, method = "GET", body) => {
     expect(
       (await api("/bills?tag=" + encodeURIComponent("宝宝标签"))).length,
     ).toBe(1);
+    const historyBefore = await api("/bills");
+    await nav("分类与标签");
+    await expect(
+      page.getByText("分类记录钱的用途，标签补充归属与场景。", { exact: true }),
+    ).toBeVisible();
+    await expect(page.getByText("辅助标签", { exact: true })).toBeVisible();
+    await page
+      .getByRole("button", { name: "归档标签家庭消费", exact: true })
+      .click();
+    await page
+      .locator(".ant-popconfirm:visible")
+      .getByRole("button", { name: "确认归档标签", exact: true })
+      .click();
+    await expect
+      .poll(
+        async () => (await api("/tags")).find((t) => t.id === family)?.active,
+      )
+      .toBe(false);
+    await expect(
+      page.locator(`[data-catalog-id="tag:${family}"]`),
+    ).not.toBeVisible();
+    await page.getByText(/^已归档标签（/).click();
+    await expect(
+      page.locator(`[data-catalog-id="tag:${family}"]`),
+    ).toBeVisible();
+    const afterArchive = await api("/bills/export");
+    expect(
+      afterArchive.ai_reference.taxonomy.tags.some(
+        (t) => t.name === "家庭消费" || t.name === "尿布",
+      ),
+    ).toBe(false);
+    expect(await api("/bills")).toEqual(historyBefore);
+    expect(
+      (await api("/bills?tag=" + encodeURIComponent("家庭消费"))).length,
+    ).toBe(2);
+    await page.screenshot({
+      path: path.join(dir, "catalog-archived.png"),
+      fullPage: true,
+    });
+    await nav("交易明细");
+    const filter = page.getByRole("combobox", {
+      name: "标签树筛选",
+      exact: true,
+    });
+    await filter.locator("../..").click();
+    await expect(
+      page
+        .locator(".ant-select-dropdown:visible")
+        .getByText("家庭消费", { exact: true }),
+    ).toHaveCount(0);
+    await page.keyboard.press("Escape");
+    await nav("分类与标签");
+    await page.getByText(/^已归档标签（/).click();
+    await page
+      .getByRole("button", { name: "恢复标签家庭消费", exact: true })
+      .click();
+    await page
+      .locator(".ant-popconfirm:visible")
+      .getByRole("button", { name: "确认恢复标签", exact: true })
+      .click();
+    await expect
+      .poll(
+        async () => (await api("/tags")).find((t) => t.id === family)?.active,
+      )
+      .toBe(true);
+    await expect(page.getByText(/^已归档标签（/)).toHaveCount(0);
     expect((await api("/accounts")).find((a) => a.id === 5).balance).toBe(
       balance,
     );
@@ -209,6 +275,7 @@ const api = async (p, method = "GET", body) => {
           "新增子分类和子标签",
           "编辑父标签入口",
           "移动标签刷新持久化",
+          "标签整树归档及恢复，历史保留且 AI 目录排除",
           "余额不变",
         ],
         screenshots: dir,
