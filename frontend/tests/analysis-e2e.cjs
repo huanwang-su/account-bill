@@ -175,8 +175,19 @@ const server = spawn(
     );
     await page.unroute("**/api/reports/analysis?**");
     await expect(page.getByTestId("analysis-income")).toHaveText("¥ 0.00");
-    await page.getByRole("button", { name: "重置条件", exact: true }).click();
+    await page.getByRole("button", { name: "重置分类", exact: true }).click();
     await expect(page.getByTestId("analysis-expense")).toHaveText("¥ 2,770.00");
+    await expect(
+      page.getByRole("button", { name: "重置分类", exact: true }),
+    ).toBeDisabled();
+    expect(await page.evaluate(() => window.scrollY)).toBeGreaterThan(
+      scrollBefore - 80,
+    );
+    await expect(
+      page
+        .getByRole("combobox", { name: "分析分类层级", exact: true })
+        .locator("../.."),
+    ).toContainText("按二级分类");
     console.log("PASS 一级/二级分类、分类钻取、拆分交易只计算匹配部分");
     const threshold = page.getByRole("spinbutton", {
       name: "大额交易门槛",

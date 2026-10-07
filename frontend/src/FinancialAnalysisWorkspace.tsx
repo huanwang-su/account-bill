@@ -431,18 +431,27 @@ export class FinancialAnalysisWorkspace extends React.Component<Props, State> {
               </Card>
               <div className="section-top analysis-category-title">
                 <h2>分类分析</h2>
-                <Select
-                  aria-label="分析分类层级"
-                  value={level}
-                  style={{ width: 160 }}
-                  options={[
-                    { value: 1, label: "按一级分类" },
-                    { value: 2, label: "按二级分类" },
-                  ]}
-                  onChange={(level) =>
-                    this.setState({ level }, () => this.load())
-                  }
-                />
+                <Space>
+                  <Button
+                    aria-label="重置分类"
+                    disabled={!filters.category_id || this.state.loading}
+                    onClick={() => this.setFilter({ category_id: undefined })}
+                  >
+                    重置分类
+                  </Button>
+                  <Select
+                    aria-label="分析分类层级"
+                    value={level}
+                    style={{ width: 160 }}
+                    options={[
+                      { value: 1, label: "按一级分类" },
+                      { value: 2, label: "按二级分类" },
+                    ]}
+                    onChange={(level) =>
+                      this.setState({ level }, () => this.load())
+                    }
+                  />
+                </Space>
               </div>
               <div className="analysis-category-grid mb">
                 {this.renderCategories("expense")}
