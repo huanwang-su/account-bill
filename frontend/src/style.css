@@ -1154,6 +1154,23 @@ footer span {
   grid-template-columns: minmax(0, 1fr) minmax(0, 1.2fr);
   gap: 22px;
 }
+.investment-charts {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 22px;
+}
+.investment-note {
+  line-height: 1.8;
+}
+.investment-row-note {
+  display: block;
+  color: #88978c;
+  max-width: 280px;
+  overflow-wrap: anywhere;
+}
+.investment-workspace .ant-table-cell {
+  overflow-wrap: anywhere;
+}
 .counterparty-valuation-summary {
   display: flex;
   flex-wrap: wrap;

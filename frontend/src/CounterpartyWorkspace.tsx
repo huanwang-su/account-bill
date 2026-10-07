@@ -97,8 +97,7 @@ export class CounterpartyWorkspace extends React.Component<Props, State> {
   }
   async valuationDetail(id: number) {
     try {
-      const rows: Row[] = await this.api.request("/transactions?audit=true");
-      const row = rows.find((r) => r.id === id);
+      const row = await this.api.transaction(id);
       if (row) this.props.onDetail(row);
     } catch (error) {
       message.error(error instanceof Error ? error.message : "无法查看交易");

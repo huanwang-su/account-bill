@@ -34,6 +34,10 @@ export class LedgerApi {
         .map(([k, v]) => [k, String(v)]),
     ).toString();
   }
+  async transaction(id: number): Promise<Row | undefined> {
+    const rows: Row[] = await this.request("/transactions?audit=true");
+    return rows.find((row) => row.id === id);
+  }
 }
 export class MoneyFormatter {
   static format(fen: number = 0) {

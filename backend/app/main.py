@@ -25,6 +25,7 @@ from .balance_sheet import BalanceSheetService
 from .financial_analysis import FinancialAnalysisService
 from .securities import SecuritiesValuationService
 from .counterparty_analysis import CounterpartyAnalysisService
+from .investment_analysis import InvestmentAnalysisService
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -46,6 +47,7 @@ class LedgerApplication:
         self.financial_analysis = FinancialAnalysisService(self.db)
         self.securities = SecuritiesValuationService(self.db)
         self.counterparties = CounterpartyAnalysisService(self.db)
+        self.investments = InvestmentAnalysisService(self.db)
         self.imports = ImportService(self.db)
         self.imports.link_existing_pouches()
         self.bills = BillService(self.db)
@@ -59,7 +61,7 @@ class LedgerApplication:
         self.posting.backfill()
         BillStatusService(self.db).apply_existing()
         self.lock = RLock()
-        self.app = FastAPI(title="有数 · 本地账本", version="0.16.0")
+        self.app = FastAPI(title="有数 · 本地账本", version="0.17.0")
         self.app.add_middleware(
             TrustedHostMiddleware,
             allowed_hosts=["127.0.0.1", "localhost", "testserver"],
@@ -209,6 +211,15 @@ class LedgerApplication:
         @app.get("/api/reports/counterparties")
         def counterparties(request: Request, account_id: int):
             return self.counterparties.analyze(account_id, dict(request.query_params))
+
+        @app.get("/api/reports/investments")
+        def investments(
+            account_id: int = None,
+            start: str = None,
+            end: str = None,
+            grain: str = "month",
+        ):
+            return self.investments.analyze(account_id, start, end, grain)
 
         @app.get("/api/categories")
         def categories():
