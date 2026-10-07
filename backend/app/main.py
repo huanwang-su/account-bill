@@ -22,6 +22,7 @@ from .classification_policy import ClassificationPolicyService
 from .transfer_matching import TransferMatchService
 from .bill_associations import BillAssociationService
 from .balance_sheet import BalanceSheetService
+from .financial_analysis import FinancialAnalysisService
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -40,6 +41,7 @@ class LedgerApplication:
         self.transactions = TransactionService(self.db)
         self.reports = ReportService(self.db)
         self.balance_sheet = BalanceSheetService(self.db)
+        self.financial_analysis = FinancialAnalysisService(self.db)
         self.imports = ImportService(self.db)
         self.imports.link_existing_pouches()
         self.bills = BillService(self.db)
@@ -53,7 +55,7 @@ class LedgerApplication:
         self.posting.backfill()
         BillStatusService(self.db).apply_existing()
         self.lock = RLock()
-        self.app = FastAPI(title="有数 · 本地账本", version="0.13.0")
+        self.app = FastAPI(title="有数 · 本地账本", version="0.14.0")
         self.app.add_middleware(
             TrustedHostMiddleware,
             allowed_hosts=["127.0.0.1", "localhost", "testserver"],
@@ -224,6 +226,20 @@ class LedgerApplication:
         @app.get("/api/reports/balance-sheet")
         def balance_sheet(as_of: str = None, group_id: int = None):
             return self.balance_sheet.snapshot(as_of, group_id)
+
+        @app.get("/api/reports/analysis")
+        def financial_analysis(
+            request: Request,
+            grain: str = "day",
+            level: int = 1,
+            large_amount: str = "1000.00",
+            group_id: int = None,
+            account_id: int = None,
+            category_id: int = None,
+        ):
+            return self.financial_analysis.analyze(
+                dict(request.query_params), grain, level, large_amount
+            )
 
         @app.post("/api/transactions")
         def post(data: dict):

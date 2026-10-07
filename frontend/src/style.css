@@ -1073,3 +1073,64 @@ footer span {
   margin-top: 8px;
   color: inherit;
 }
+.report-tabs > .ant-tabs-nav {
+  margin-bottom: 26px;
+}
+.analysis-intro h2,
+.analysis-category-title h2 {
+  font-size: 19px;
+  margin: 0 0 8px;
+}
+.analysis-intro p {
+  margin: 0 0 22px;
+}
+.analysis-metrics {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+.analysis-category-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 24px;
+}
+.analysis-category-grid .ant-card {
+  min-width: 0;
+}
+.analysis-category-grid .ant-table-cell {
+  overflow-wrap: anywhere;
+}
+.analysis-category-grid .ant-btn-link {
+  padding-left: 0;
+  white-space: normal;
+  height: auto;
+  text-align: left;
+}
+.analysis-large-summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 18px 32px;
+  margin-bottom: 20px;
+  color: #66796f;
+}
+.analysis-large-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 2fr) minmax(280px, 1fr);
+  gap: 24px;
+}
+.analysis-large-table {
+  min-width: 0;
+}
+.analysis-large-rank {
+  padding: 0 12px;
+  background: #f7f9f5;
+  border-radius: 10px;
+}
+.analysis-large-rank h3 {
+  font-size: 14px;
+  padding: 12px 0 0;
+}
+.analysis-note {
+  line-height: 1.8;
+}
+.analysis-trend .chart {
+  height: 340px;
+}

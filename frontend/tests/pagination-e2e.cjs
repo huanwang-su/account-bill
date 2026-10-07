@@ -143,7 +143,8 @@ const server = spawn(
     await expect(tableRows(table)).toHaveCount(15);
     console.log("PASS 账户流水完整跨页，每页50条生效");
     await nav("统计报表");
-    table = page.locator(".page-content .ant-table-wrapper").first();
+    await page.getByRole("tab", { name: "统计明细", exact: true }).click();
+    table = page.locator(".ant-tabs-tabpane-active .ant-table-wrapper").first();
     await expect(tableRows(table)).toHaveCount(10);
     await allPages(table, 65);
     await size(table, 20);

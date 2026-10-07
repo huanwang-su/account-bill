@@ -24,6 +24,7 @@ import {
   Descriptions,
   message,
   Tooltip,
+  Tabs,
 } from "antd";
 import zhCN from "antd/locale/zh_CN";
 import {
@@ -44,7 +45,6 @@ import {
   InboxOutlined,
 } from "@ant-design/icons";
 import dayjs from "dayjs";
-import * as echarts from "echarts";
 import {
   LedgerApi,
   MoneyFormatter as Money,
@@ -62,6 +62,8 @@ import { AccountWorkspace } from "./AccountWorkspace";
 import { AccountSettings } from "./AccountSettings";
 import { ClassificationSettings } from "./ClassificationSettings";
 import { BalanceSheetWorkspace } from "./BalanceSheetWorkspace";
+import { FinancialAnalysisWorkspace } from "./FinancialAnalysisWorkspace";
+import { Chart } from "./Chart";
 
 const kindNames: Row = {
   EXPENSE: "支出",
@@ -81,29 +83,9 @@ const states: Row = {
   ERROR: ["解析错误", "red"],
   REVERSED: ["已撤销", "red"],
 };
-class Chart extends React.Component<{ option: echarts.EChartsOption }> {
-  el = React.createRef<HTMLDivElement>();
-  chart?: echarts.ECharts;
-  observer?: ResizeObserver;
-  componentDidMount() {
-    this.chart = echarts.init(this.el.current!);
-    this.chart.setOption(this.props.option);
-    this.observer = new ResizeObserver(() => this.chart?.resize());
-    this.observer.observe(this.el.current!);
-  }
-  componentDidUpdate() {
-    this.chart?.setOption(this.props.option, true);
-  }
-  componentWillUnmount() {
-    this.observer?.disconnect();
-    this.chart?.dispose();
-  }
-  render() {
-    return <div ref={this.el} className="chart" />;
-  }
-}
 interface State {
   page: string;
+  reportTab: string;
   accounts: Row[];
   groups: Row[];
   categories: Row[];
@@ -132,6 +114,7 @@ class LedgerApp extends React.Component<{}, State> {
   form = React.createRef<any>();
   state: State = {
     page: "bills",
+    reportTab: "analysis",
     accounts: [],
     groups: [],
     categories: [],
@@ -414,7 +397,9 @@ class LedgerApp extends React.Component<{}, State> {
             className="balance-overview-link"
             type="link"
             size="small"
-            onClick={() => this.setState({ page: "balance-sheet" })}
+            onClick={() =>
+              this.setState({ page: "reports", reportTab: "balance-sheet" })
+            }
           >
             查看资产负债表 <ArrowRightOutlined />
           </Button>
@@ -979,7 +964,7 @@ class LedgerApp extends React.Component<{}, State> {
       />
     );
   }
-  renderReports() {
+  renderReportDetails() {
     return (
       <>
         <div className="section-top">
@@ -1030,6 +1015,54 @@ class LedgerApp extends React.Component<{}, State> {
           />
         </Card>
       </>
+    );
+  }
+  renderReports() {
+    const refreshKey = JSON.stringify([
+      this.state.accounts,
+      this.state.groups,
+      this.state.categories,
+      this.state.tags,
+      this.state.transactions,
+    ]);
+    return (
+      <Tabs
+        className="report-tabs"
+        activeKey={this.state.reportTab}
+        onChange={(reportTab) => this.setState({ reportTab })}
+        items={[
+          {
+            key: "analysis",
+            label: "收支分析",
+            children: (
+              <FinancialAnalysisWorkspace
+                accounts={this.state.accounts}
+                groups={this.state.groups}
+                categories={this.state.categories}
+                tags={this.state.tags}
+                refreshKey={refreshKey}
+                onDetail={(row) => this.open("detail", row)}
+              />
+            ),
+          },
+          {
+            key: "details",
+            label: "统计明细",
+            children: this.renderReportDetails(),
+          },
+          {
+            key: "balance-sheet",
+            label: "资产负债表",
+            children: (
+              <BalanceSheetWorkspace
+                groups={this.state.groups}
+                refreshKey={refreshKey}
+                onAccounts={() => this.setState({ page: "accounts" })}
+              />
+            ),
+          },
+        ]}
+      />
     );
   }
   renderSettings() {
@@ -1091,7 +1124,7 @@ class LedgerApp extends React.Component<{}, State> {
           <Card title="关于这个账本">
             <Descriptions column={1}>
               <Descriptions.Item label="版本">
-                0.13.0 · 本地单用户版
+                0.14.0 · 本地单用户版
               </Descriptions.Item>
               <Descriptions.Item label="币种">人民币 CNY</Descriptions.Item>
               <Descriptions.Item label="时间">
@@ -1622,7 +1655,6 @@ class LedgerApp extends React.Component<{}, State> {
   render() {
     const nav = [
       ["overview", "总览", <AppstoreOutlined />],
-      ["balance-sheet", "资产负债表", <BarChartOutlined />],
       ["accounts", "账户管理", <WalletOutlined />],
       ["bills", "交易明细", <FileDoneOutlined />],
       ["transactions", "账户流水", <SwapOutlined />],
@@ -1635,12 +1667,11 @@ class LedgerApp extends React.Component<{}, State> {
     const subtitles: Row = {
       bills: "已导入的统一账单，按流水号追溯。",
       overview: "看清每笔收支，让生活心中有数。",
-      "balance-sheet": "按账户组查看资产、负债与净资产。",
       accounts: "按家庭和个人分组，查看账户归属与余额。",
       transactions: "每一笔变动，都有迹可循。",
       imports: "从一份账单，整理你的日常。",
       catalog: "用分类和标签，建立自己的记账习惯。",
-      reports: "换一个角度，了解钱花在哪里。",
+      reports: "分析收支、分类与大额交易，查看资产负债。",
       data: "备份与检查你的本地账本。",
       settings: "管理账户配置和 AI 分类参考。",
     };
@@ -1728,15 +1759,6 @@ class LedgerApp extends React.Component<{}, State> {
               />
             ) : this.state.page === "overview" ? (
               this.renderOverview()
-            ) : this.state.page === "balance-sheet" ? (
-              <BalanceSheetWorkspace
-                groups={this.state.groups}
-                refreshKey={JSON.stringify([
-                  this.state.accounts,
-                  this.state.groups,
-                ])}
-                onAccounts={() => this.setState({ page: "accounts" })}
-              />
             ) : this.state.page === "accounts" ? (
               this.renderAccounts()
             ) : this.state.page === "transactions" ? (
@@ -1754,7 +1776,7 @@ class LedgerApp extends React.Component<{}, State> {
             )}
           </div>
           <footer>
-            有数 · 每一笔，都算数 <span>本地账本 v0.13</span>
+            有数 · 每一笔，都算数 <span>本地账本 v0.14</span>
           </footer>
         </main>
         <Modal

@@ -57,7 +57,10 @@ const server = spawn(
     const nav = async (name) =>
       page.locator("nav button").filter({ hasText: name }).click();
     const select = async (name, label) => {
-      await page.getByRole("combobox", { name, exact: true }).locator("../..").click();
+      await page
+        .getByRole("combobox", { name, exact: true })
+        .locator("../..")
+        .click();
       await page
         .locator(".ant-select-dropdown:visible")
         .getByText(label, { exact: true })
@@ -143,9 +146,10 @@ const server = spawn(
     await nav("总览");
     await page.getByRole("button", { name: /查看资产负债表/ }).click();
     await expect(
-      page.getByRole("heading", { name: "资产负债表", exact: true }),
-    ).toBeVisible();
+      page.getByRole("tab", { name: "资产负债表", exact: true }),
+    ).toHaveAttribute("aria-selected", "true");
     await select("资产负债表账户组", "排序测试家庭");
+    await expect(page.getByTestId("balance-assets")).toHaveText("¥ 2,100.00");
     const dateInput = page.getByRole("textbox", {
       name: "资产负债表截止日期",
       exact: true,
@@ -153,6 +157,7 @@ const server = spawn(
     const date = async (value) => {
       await dateInput.fill(value);
       await dateInput.press("Enter");
+      await dateInput.press("Tab");
       await expect(page.locator(".balance-sheet-note")).toContainText(value);
     };
     await date("2026-09-10");
