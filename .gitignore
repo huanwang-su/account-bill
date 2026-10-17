@@ -9,10 +9,19 @@ __pycache__/
 .env
 .env.*
 !.env.example
+# Local ledger, imports, exports and backups must never enter the source repository.
 data/*
 !data/.gitkeep
+backups/
+exports/
+uploads/
+logs/
+*.sqlite
+*.sqlite-*
+*.sqlite.*
 *.sqlite3
 *.sqlite3-*
 *.sqlite3.*
 *.db
 *.db-*
+*.db.*
