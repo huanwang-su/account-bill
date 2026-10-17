@@ -84,27 +84,47 @@ export class InvestmentWorkspace extends React.Component<Props, State> {
       width,
       align: "right",
       sorter: (a: Row, b: Row) => a[dataIndex] - b[dataIndex],
-      render: (value: number) => Money.format(value),
+      render: (value: number, row: Row) =>
+        row.analysis_mode === "INCOME_ONLY" &&
+        ["beginning", "ending", "capital_net", "internal_net"].includes(
+          dataIndex,
+        )
+          ? "—"
+          : Money.format(value),
     };
   }
   render() {
     const { report, filters, grain, loading } = this.state;
     const securities = this.props.accounts.filter(
-      (a) => !a.merged_into_id && a.role === "ASSET" && a.kind === "证券",
+      (a) =>
+        !a.merged_into_id &&
+        a.role === "ASSET" &&
+        ["证券", "理财"].includes(a.kind),
     );
-    const selected = securities.find((a) => a.id === filters.account_id);
+    const choices: Row[] = report?.available_accounts || securities;
+    const selected = choices.find((a) => a.id === filters.account_id);
     const resetKey = JSON.stringify(filters);
+    const comparison: Row[] = [...(report?.accounts || [])].sort(
+      (a: Row, b: Row) => a.profit - b.profit,
+    );
     return (
       <div className="investment-workspace">
         <div className="section-top">
           <div>
-            <h2>理财收益分析</h2>
+            <h2>理财</h2>
             <p className="muted">
-              查看证券账户盈亏，区分投资收益与银行等账户的本金流动。
+              汇总整体理财收益，查看各账户的收益、亏损与资金情况。
             </p>
           </div>
-          {selected?.active && (
-            <Button onClick={() => this.props.onUpdate(selected)}>
+          {selected?.active && selected.kind === "证券" && (
+            <Button
+              onClick={() => {
+                const account = this.props.accounts.find(
+                  (a) => a.id === selected.id,
+                );
+                if (account) this.props.onUpdate(account);
+              }}
+            >
               更新证券余额
             </Button>
           )}
@@ -115,8 +135,8 @@ export class InvestmentWorkspace extends React.Component<Props, State> {
             style={{ width: 260 }}
             value={filters.account_id ?? "all"}
             options={[
-              { value: "all", label: "全部证券账户" },
-              ...securities.map((a) => ({
+              { value: "all", label: "全部理财收益" },
+              ...choices.map((a) => ({
                 value: a.id,
                 label: a.name + (a.active ? "" : "（停用）"),
               })),
@@ -162,7 +182,7 @@ export class InvestmentWorkspace extends React.Component<Props, State> {
             <Spin spinning={loading}>
               {!report.account_count ? (
                 <Card>
-                  <Empty description="暂无证券账户，在账户管理中将账户类型设为“证券”" />
+                  <Empty description="暂无理财账户或理财收益记录，可添加证券/理财账户，或将相关收入分类为“理财收益”" />
                   <Button onClick={this.props.onAccounts}>账户管理</Button>
                 </Card>
               ) : (
@@ -171,6 +191,27 @@ export class InvestmentWorkspace extends React.Component<Props, State> {
                     分析区间：{report.start} 至 {report.end}
                     ，期末资产截至结束日期日末。
                   </p>
+                  <div className="section-top">
+                    <h3>
+                      {selected ? `${selected.name} · 收益情况` : "整体收益"}
+                    </h3>
+                    {selected && (
+                      <Button
+                        onClick={() => this.filter({ account_id: undefined })}
+                      >
+                        查看全部账户
+                      </Button>
+                    )}
+                  </div>
+                  {!!report.income_only_count && (
+                    <Alert
+                      className="mb"
+                      type="info"
+                      showIcon
+                      message="普通账户仅统计已归类的理财收益/投资亏损，账户全部余额不计入理财资产。"
+                      description={`此类收益净额 ¥ ${Money.format(report.income_only_profit)}，已计入整体净收益。`}
+                    />
+                  )}
                   {!!report.missing_opening_ids.length && (
                     <Alert
                       className="mb"
@@ -187,16 +228,19 @@ export class InvestmentWorkspace extends React.Component<Props, State> {
                   )}
                   <div className="metrics analysis-metrics">
                     <div className="metric">
-                      <span>期末证券资产</span>
+                      <span>理财资产</span>
                       <strong data-testid="investment-assets">
-                        ¥ {Money.format(report.ending)}
+                        {report.asset_account_count
+                          ? `¥ ${Money.format(report.ending)}`
+                          : "—"}
                       </strong>
                       <small>
-                        {report.account_count} 个账户，按已记录的估值与流水
+                        {report.asset_account_count} 个理财资产账户 ·{" "}
+                        {report.income_only_count} 个收益来源账户
                       </small>
                     </div>
                     <div className="metric featured">
-                      <span>区间净盈亏</span>
+                      <span>净收益</span>
                       <strong data-testid="investment-profit">
                         ¥ {Money.format(report.profit)}
                       </strong>
@@ -225,10 +269,57 @@ export class InvestmentWorkspace extends React.Component<Props, State> {
                       </small>
                     </div>
                   </div>
+                  <Card className="mb" title="各账户净收益对比（元）">
+                    <Chart
+                      label="各账户理财净收益对比"
+                      onClick={(params) => {
+                        if (params.data?.id)
+                          this.filter({ account_id: params.data.id });
+                      }}
+                      option={{
+                        tooltip: { trigger: "axis", renderMode: "richText" },
+                        grid: { left: 150, right: 35, top: 20, bottom: 35 },
+                        xAxis: { type: "value" },
+                        yAxis: {
+                          type: "category",
+                          data: comparison.map((a: Row) => a.name),
+                          axisLabel: { width: 130, overflow: "truncate" },
+                        },
+                        dataZoom:
+                          comparison.length > 10
+                            ? [
+                                {
+                                  type: "slider",
+                                  yAxisIndex: 0,
+                                  orient: "vertical",
+                                  width: 12,
+                                  right: 0,
+                                  startValue: 0,
+                                  endValue: 9,
+                                  showDataShadow: false,
+                                },
+                              ]
+                            : [],
+                        series: [
+                          {
+                            type: "bar",
+                            barMaxWidth: 26,
+                            data: comparison.map((a: Row) => ({
+                              id: a.id,
+                              value: a.profit / 100,
+                              itemStyle: {
+                                color: a.profit >= 0 ? "#73a58f" : "#b78863",
+                              },
+                            })),
+                          },
+                        ],
+                      }}
+                    />
+                  </Card>
                   <div className="investment-charts mb">
                     <Card title="盈亏趋势（元）">
                       <Chart
-                        label="证券盈亏趋势"
+                        label="理财收益趋势"
                         option={{
                           tooltip: { trigger: "axis", renderMode: "richText" },
                           legend: { bottom: 0 },
@@ -263,36 +354,43 @@ export class InvestmentWorkspace extends React.Component<Props, State> {
                         }}
                       />
                     </Card>
-                    <Card title="证券资产趋势（元）">
-                      <Chart
-                        label="证券资产趋势"
-                        option={{
-                          tooltip: { trigger: "axis", renderMode: "richText" },
-                          grid: { left: 75, right: 25, top: 20, bottom: 60 },
-                          xAxis: {
-                            type: "category",
-                            data: report.trend.map((r: Row) => r.period),
-                          },
-                          yAxis: { type: "value" },
-                          series: [
-                            {
-                              name: "期末资产",
-                              type: "line",
-                              showSymbol: report.trend.length <= 31,
-                              itemStyle: { color: "#73a58f" },
-                              areaStyle: { opacity: 0.08 },
-                              data: report.trend.map(
-                                (r: Row) => r.assets / 100,
-                              ),
+                    <Card title="理财资产趋势（元）">
+                      {report.asset_account_count ? (
+                        <Chart
+                          label="理财资产趋势"
+                          option={{
+                            tooltip: {
+                              trigger: "axis",
+                              renderMode: "richText",
                             },
-                          ],
-                        }}
-                      />
+                            grid: { left: 75, right: 25, top: 20, bottom: 60 },
+                            xAxis: {
+                              type: "category",
+                              data: report.trend.map((r: Row) => r.period),
+                            },
+                            yAxis: { type: "value" },
+                            series: [
+                              {
+                                name: "期末资产",
+                                type: "line",
+                                showSymbol: report.trend.length <= 31,
+                                itemStyle: { color: "#73a58f" },
+                                areaStyle: { opacity: 0.08 },
+                                data: report.trend.map(
+                                  (r: Row) => r.assets / 100,
+                                ),
+                              },
+                            ],
+                          }}
+                        />
+                      ) : (
+                        <Empty description="该账户仅统计理财收益，不统计资产余额" />
+                      )}
                     </Card>
                   </div>
                   <Card
                     className="mb"
-                    title="账户盈亏对比（元）"
+                    title="各账户情况（元）"
                     extra={
                       <small className="muted">
                         合并来源只统计一次，停用账户保留历史
@@ -308,35 +406,58 @@ export class InvestmentWorkspace extends React.Component<Props, State> {
                       scroll={{ x: 1300 }}
                       columns={[
                         {
-                          title: "证券账户",
+                          title: "账户",
                           dataIndex: "name",
                           width: 160,
                           fixed: "left",
                           render: (text, row) => (
                             <>
-                              {text} {!row.active && <Tag>停用</Tag>}
+                              <Button
+                                type="link"
+                                size="small"
+                                onClick={() =>
+                                  this.filter({ account_id: row.id })
+                                }
+                              >
+                                {text}
+                              </Button>{" "}
+                              {!row.active && <Tag>停用</Tag>}
                             </>
                           ),
                         },
-                        this.amount("区间初资产", "beginning"),
+                        {
+                          title: "统计范围",
+                          width: 110,
+                          render: (_, row) => (
+                            <Tag>
+                              {row.analysis_mode === "INCOME_ONLY"
+                                ? "仅理财收益"
+                                : row.kind}
+                            </Tag>
+                          ),
+                        },
+                        this.amount("净收益", "profit"),
+                        this.amount("累计盈利", "gain"),
+                        this.amount("累计亏损/费用", "loss", 140),
                         this.amount("期末资产", "ending"),
                         this.amount("本金净转入", "capital_net"),
+                        this.amount("区间初资产", "beginning"),
                         this.amount("证券内转净额", "internal_net"),
                         this.amount("估值盈亏", "valuation_profit"),
                         this.amount("其他收益/费用", "other_profit"),
-                        this.amount("区间净盈亏", "profit"),
                         {
                           title: "最近余额更新",
                           dataIndex: "last_valuation",
                           width: 150,
-                          render: (v) => v || "尚未更新",
+                          render: (v, row) =>
+                            row.kind === "证券" ? v || "尚未更新" : "—",
                         },
                         {
                           title: "操作",
                           width: 100,
                           fixed: "right",
                           render: (_, row) =>
-                            row.active ? (
+                            row.active && row.kind === "证券" ? (
                               <Button
                                 type="link"
                                 size="small"
@@ -356,36 +477,38 @@ export class InvestmentWorkspace extends React.Component<Props, State> {
                       ]}
                     />
                   </Card>
-                  <Card
-                    className="mb"
-                    title="资产变动核对"
-                    extra={
-                      <Tag color={report.reconciled ? "green" : "red"}>
-                        {report.reconciled ? "金额一致" : "需要核对"}
-                      </Tag>
-                    }
-                  >
-                    <Descriptions size="small" column={3}>
-                      {[
-                        ["区间初资产", "beginning"],
-                        ["本期新设期初", "opening_added"],
-                        ["本金净转入（银行等）", "capital_net"],
-                        ["证券账户内转净额", "internal_net"],
-                        ["区间净盈亏", "profit"],
-                        ["其他余额变动", "other_changes"],
-                        ["期末证券资产", "ending"],
-                      ].map(([title, key]) => (
-                        <Descriptions.Item key={key} label={title}>
-                          ¥ {Money.format(report[key])}
-                        </Descriptions.Item>
-                      ))}
-                    </Descriptions>
-                    <p className="muted investment-note">
-                      区间初资产 + 本期新设期初 + 本金净转入 + 证券内转净额 +
-                      净盈亏 + 其他余额变动 =
-                      期末资产。全部证券账户汇总时，证券账户之间的互转净额为零。
-                    </p>
-                  </Card>
+                  {!!report.asset_account_count && (
+                    <Card
+                      className="mb"
+                      title="资产变动核对"
+                      extra={
+                        <Tag color={report.reconciled ? "green" : "red"}>
+                          {report.reconciled ? "金额一致" : "需要核对"}
+                        </Tag>
+                      }
+                    >
+                      <Descriptions size="small" column={3}>
+                        {[
+                          ["区间初资产", "beginning"],
+                          ["本期新设期初", "opening_added"],
+                          ["本金净转入（银行等）", "capital_net"],
+                          ["理财账户内转净额", "internal_net"],
+                          ["理财账户净收益", "asset_profit"],
+                          ["其他余额变动", "other_changes"],
+                          ["期末理财资产", "ending"],
+                        ].map(([title, key]) => (
+                          <Descriptions.Item key={key} label={title}>
+                            ¥ {Money.format(report[key])}
+                          </Descriptions.Item>
+                        ))}
+                      </Descriptions>
+                      <p className="muted investment-note">
+                        区间初资产 + 本期新设期初 + 本金净转入 + 证券内转净额 +
+                        理财账户净收益 + 其他余额变动 =
+                        期末资产。全部理财账户汇总时，理财账户之间的互转净额为零；普通账户的理财收益仅计入收益统计，不参与理财资产核对。
+                      </p>
+                    </Card>
+                  )}
                   <Card className="mb" title="盈亏与资金明细">
                     <Tabs
                       items={[
@@ -402,7 +525,7 @@ export class InvestmentWorkspace extends React.Component<Props, State> {
                               columns={[
                                 { title: "时间", dataIndex: "occurred_at" },
                                 {
-                                  title: "证券账户",
+                                  title: "账户",
                                   render: (_, r) => r.account_names.join("、"),
                                 },
                                 {
@@ -469,14 +592,14 @@ export class InvestmentWorkspace extends React.Component<Props, State> {
                                   render: (_, r) => (
                                     <Tag>
                                       {r.internal
-                                        ? "证券账户互转"
+                                        ? "理财账户互转"
                                         : "银行等资金转账"}
                                     </Tag>
                                   ),
                                 },
                                 this.amount("转账金额（元）", "amount"),
                                 this.amount(
-                                  "所选证券资产变动",
+                                  "所选理财资产变动",
                                   "scope_change",
                                   150,
                                 ),
@@ -501,7 +624,7 @@ export class InvestmentWorkspace extends React.Component<Props, State> {
                     />
                   </Card>
                   <p className="muted investment-note">
-                    银行与证券之间的入金、出金请记为内部转账，不计投资收益。盈亏包括证券余额更新产生的估值差额及证券账户已记录的收入、支出和退款。资产按最近估值及后续流水累计，未更新的市场波动不会自动反映。
+                    理财资产包含证券及“理财”类型账户；其入金、出金按内部转账记录，不计投资收益。普通账户仅纳入已归类为理财收益/投资亏损的交易；拆分交易只计算匹配部分。资产按已记录的估值和流水累计，未更新的市场波动不会自动反映。
                   </p>
                 </>
               )}

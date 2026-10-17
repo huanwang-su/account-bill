@@ -13,6 +13,8 @@ def portfolio(tmp_path):
     db = Database(tmp_path / "db")
     db.initialize()
     accounts = AccountService(db)
+    bank = next(a for a in accounts.list() if a["id"] == 6)
+    accounts.save({**bank, "kind": "银行卡"}, 6)
     a = accounts.save(dict(name="合成证券甲", kind="证券", role="ASSET"))["id"]
     b = accounts.save(dict(name="合成证券乙", kind="证券", role="ASSET"))["id"]
     values = SecuritiesValuationService(db)
@@ -191,6 +193,9 @@ def test_missing_baseline_inactive_account_and_read_only(portfolio):
 def test_empty_and_invalid_selection(tmp_path):
     db = Database(tmp_path / "empty")
     db.initialize()
+    accounts = AccountService(db)
+    bank = next(a for a in accounts.list() if a["id"] == 6)
+    accounts.save({**bank, "kind": "银行卡"}, 6)
     service = InvestmentAnalysisService(db)
     result = service.analyze()
     assert (
@@ -208,7 +213,7 @@ def test_empty_and_invalid_selection(tmp_path):
         "missing_opening_ids"
     ] == [future]
     for kwargs in (
-        dict(account_id=5),
+        dict(account_id=1),
         dict(account_id=99999),
         dict(start="bad"),
         dict(start="2026-10-01", end="2026-09-01"),
@@ -216,3 +221,118 @@ def test_empty_and_invalid_selection(tmp_path):
     ):
         with pytest.raises(DomainError):
             service.analyze(**kwargs)
+
+
+def test_ordinary_account_only_investment_categories_and_split_portion(portfolio):
+    db, a, b, _ = portfolio
+    catalog = CatalogService(db)
+    categories = catalog.categories()
+    income = next(c["id"] for c in categories if c["name"] == "理财收益")
+    loss = next(c["id"] for c in categories if c["name"] == "投资亏损")
+    salary = next(c["id"] for c in categories if c["name"] == "工资")
+    interest = catalog.save_category(
+        dict(name="存款利息", kind="INCOME", parent_id=income)
+    )["id"]
+    transactions = TransactionService(db)
+
+    def post(kind, amount, category, **extras):
+        return transactions.post(
+            dict(
+                kind=kind,
+                amount=amount,
+                category_id=category,
+                account_id=5,
+                occurred_at="2026-09-10",
+                idempotency_key=str(uuid.uuid4()),
+                **extras
+            )
+        )["id"]
+
+    post("INCOME", "100", interest)
+    post("INCOME", "500", salary)
+    fee = post("EXPENSE", "8", loss)
+    post("REFUND", "2", loss, related_id=fee)
+    post(
+        "EXPENSE",
+        "100",
+        loss,
+        items=[dict(category_id=loss, amount="30"), dict(category_id=1, amount="70")],
+    )
+    service = InvestmentAnalysisService(db)
+    all_accounts = service.analyze(end="2026-09-30")
+    assert all_accounts["profit"] == 46900 and all_accounts["ending"] == 370500
+    assert (
+        all_accounts["asset_profit"] == 40500
+        and all_accounts["income_only_profit"] == 6400
+    )
+    assert (
+        all_accounts["asset_account_count"] == 2
+        and all_accounts["income_only_count"] == 1
+    )
+    only = service.analyze(5, end="2026-09-30")
+    assert only["profit"] == 6400 and only["ending"] == only["beginning"] == 0
+    assert len(only["profits"]) == 4 and only["asset_account_count"] == 0
+    assert only["missing_opening_ids"] == [] and only["reconciled"]
+    assert only["accounts"][0]["analysis_mode"] == "INCOME_ONLY"
+    assert (
+        only["trend"][-1]["cumulative_profit"] == 6400
+        and only["trend"][-1]["assets"] == 0
+    )
+    for row in list(only["profits"]):
+        # The linked refund must be revoked before its original expense.
+        if row["kind"] == "REFUND":
+            transactions.reverse(row["id"])
+    for row in list(only["profits"]):
+        if row["kind"] != "REFUND":
+            transactions.reverse(row["id"])
+    empty = service.analyze(5, end="2026-09-30")
+    assert empty["profit"] == empty["ending"] == 0
+    assert any(a["id"] == 5 for a in empty["available_accounts"])
+
+
+def test_wealth_account_type_is_included_without_classifying_bank_balance(tmp_path):
+    db = Database(tmp_path / "db")
+    db.initialize()
+    AccountService(db).opening(6, dict(amount="1000", occurred_at="2026-09-01"))
+    categories = CatalogService(db).categories()
+    income = next(c["id"] for c in categories if c["name"] == "理财收益")
+    transactions = TransactionService(db)
+    transactions.post(
+        dict(
+            kind="TRANSFER",
+            account_id=5,
+            to_account_id=6,
+            amount="300",
+            occurred_at="2026-09-02",
+            idempotency_key="funding",
+        )
+    )
+    transactions.post(
+        dict(
+            kind="INCOME",
+            account_id=6,
+            amount="10",
+            category_id=income,
+            occurred_at="2026-09-03",
+            idempotency_key="yield",
+        )
+    )
+    transactions.post(
+        dict(
+            kind="EXPENSE",
+            account_id=6,
+            amount="2",
+            category_id=1,
+            occurred_at="2026-09-04",
+            idempotency_key="fee",
+        )
+    )
+    result = InvestmentAnalysisService(db).analyze(end="2026-09-30")
+    assert result["account_count"] == 1 and result["asset_account_count"] == 1
+    assert (
+        result["profit"] == 800
+        and result["ending"] == 130800
+        and result["capital_net"] == 30000
+    )
+    assert result["income_only_count"] == 0 and result["reconciled"]
+    assert result["accounts"][0]["kind"] == "理财"

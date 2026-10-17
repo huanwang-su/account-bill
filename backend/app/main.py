@@ -61,7 +61,7 @@ class LedgerApplication:
         self.posting.backfill()
         BillStatusService(self.db).apply_existing()
         self.lock = RLock()
-        self.app = FastAPI(title="有数 · 本地账本", version="0.17.0")
+        self.app = FastAPI(title="有数 · 本地账本", version="0.18.0")
         self.app.add_middleware(
             TrustedHostMiddleware,
             allowed_hosts=["127.0.0.1", "localhost", "testserver"],

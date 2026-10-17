@@ -1106,7 +1106,7 @@ class LedgerApp extends React.Component<{}, State> {
           },
           {
             key: "investments",
-            label: "理财收益分析",
+            label: "理财",
             children: (
               <InvestmentWorkspace
                 accounts={this.state.accounts}
@@ -1196,7 +1196,7 @@ class LedgerApp extends React.Component<{}, State> {
           <Card title="关于这个账本">
             <Descriptions column={1}>
               <Descriptions.Item label="版本">
-                0.17.0 · 本地单用户版
+                0.18.0 · 本地单用户版
               </Descriptions.Item>
               <Descriptions.Item label="币种">人民币 CNY</Descriptions.Item>
               <Descriptions.Item label="时间">
@@ -1899,7 +1899,7 @@ class LedgerApp extends React.Component<{}, State> {
             )}
           </div>
           <footer>
-            有数 · 每一笔，都算数 <span>本地账本 v0.17</span>
+            有数 · 每一笔，都算数 <span>本地账本 v0.18</span>
           </footer>
         </main>
         <Modal

@@ -62,13 +62,18 @@ async function api(p, method = "GET", body) {
       }),
       errors = [];
     page.on("pageerror", (e) => errors.push(e.message));
+    const unused = (await api("/accounts")).find((a) => a.id === 6);
+    await api("/accounts/6", "PUT", { ...unused, kind: "其他" });
     await page.goto(url);
     await page.locator("nav button").filter({ hasText: "统计报表" }).click();
-    await page.getByRole("tab", { name: "理财收益分析", exact: true }).click();
+    await page.getByRole("tab", { name: "理财", exact: true }).click();
     await expect(
-      page.getByText("暂无证券账户，在账户管理中将账户类型设为“证券”", {
-        exact: true,
-      }),
+      page.getByText(
+        "暂无理财账户或理财收益记录，可添加证券/理财账户，或将相关收入分类为“理财收益”",
+        {
+          exact: true,
+        },
+      ),
     ).toBeVisible();
     const a = (
         await api("/accounts", "POST", {
@@ -137,7 +142,7 @@ async function api(p, method = "GET", body) {
     }
     await page.reload();
     await page.locator("nav button").filter({ hasText: "统计报表" }).click();
-    await page.getByRole("tab", { name: "理财收益分析", exact: true }).click();
+    await page.getByRole("tab", { name: "理财", exact: true }).click();
     const workspace = page.locator(".investment-workspace");
     await expect(page.getByTestId("investment-assets")).toHaveText(
       "¥ 3,705.00",
@@ -149,12 +154,12 @@ async function api(p, method = "GET", body) {
     );
     await expect(
       workspace
-        .getByRole("img", { name: "证券盈亏趋势", exact: true })
+        .getByRole("img", { name: "理财收益趋势", exact: true })
         .locator("canvas"),
     ).toHaveCount(1);
     await expect(
       workspace
-        .getByRole("img", { name: "证券资产趋势", exact: true })
+        .getByRole("img", { name: "理财资产趋势", exact: true })
         .locator("canvas"),
     ).toHaveCount(1);
     await expect(
@@ -180,7 +185,7 @@ async function api(p, method = "GET", body) {
     await expect(page.getByTestId("investment-assets")).toHaveText(
       "¥ 2,195.00",
     );
-    await choose("理财分析账户", "全部证券账户");
+    await choose("理财分析账户", "全部理财收益");
     await expect(page.getByTestId("investment-profit")).toHaveText("¥ 405.00");
     console.log(
       "PASS 空证券账户入口、全部/单账户盈亏守恒、银行本金排除与证券互转抵消",
@@ -209,7 +214,7 @@ async function api(p, method = "GET", body) {
     await expect(transfers.locator("tbody tr.ant-table-row")).toHaveCount(3);
     const internal = transfers
       .locator("tbody tr.ant-table-row")
-      .filter({ hasText: "证券账户互转" });
+      .filter({ hasText: "理财账户互转" });
     await expect(internal).toContainText("100.00");
     await expect(internal.locator("td").nth(5)).toHaveText("0.00");
     await transfers
@@ -252,8 +257,97 @@ async function api(p, method = "GET", body) {
     await expect(page.getByTestId("investment-assets")).toHaveText(
       "¥ 1,610.00",
     );
-    await choose("理财分析账户", "全部证券账户");
+    await choose("理财分析账户", "全部理财收益");
     await expect(page.getByTestId("investment-profit")).toHaveText("¥ 505.00");
+    const wealth = (
+      await api("/accounts", "POST", {
+        name: "合成理财产品",
+        kind: "理财",
+        role: "ASSET",
+      })
+    ).id;
+    await api(`/accounts/${wealth}/opening`, "POST", {
+      amount: "2000",
+      occurred_at: "2026-09-01",
+    });
+    await api("/transactions", "POST", {
+      kind: "INCOME",
+      account_id: wealth,
+      amount: "20",
+      category_id: income,
+      occurred_at: "2026-09-02",
+      idempotency_key: randomUUID(),
+    });
+    await transfer(5, wealth, "500", "2026-09-03");
+    await api("/transactions", "POST", {
+      kind: "EXPENSE",
+      account_id: wealth,
+      amount: "4",
+      category_id: 1,
+      occurred_at: "2026-09-04",
+      idempotency_key: randomUUID(),
+    });
+    await api("/transactions", "POST", {
+      kind: "INCOME",
+      account_id: 5,
+      amount: "12",
+      category_id: income,
+      occurred_at: "2026-09-02",
+      idempotency_key: randomUUID(),
+    });
+    const salary = (await api("/categories")).find((c) => c.name === "工资").id;
+    await api("/transactions", "POST", {
+      kind: "INCOME",
+      account_id: 5,
+      amount: "99",
+      category_id: salary,
+      occurred_at: "2026-09-02",
+      idempotency_key: randomUUID(),
+    });
+    await page.reload();
+    await page.locator("nav button").filter({ hasText: "统计报表" }).click();
+    await page.getByRole("tab", { name: "理财", exact: true }).click();
+    await expect(page.getByTestId("investment-profit")).toHaveText("¥ 533.00");
+    await expect(page.getByTestId("investment-assets")).toHaveText(
+      "¥ 6,321.00",
+    );
+    await expect(
+      workspace.getByText("整体收益", { exact: true }),
+    ).toBeVisible();
+    await expect(
+      workspace
+        .getByRole("img", { name: "各账户理财净收益对比", exact: true })
+        .locator("canvas"),
+    ).toHaveCount(1);
+    const ordinary = workspace
+      .locator(".investment-accounts-table tbody tr.ant-table-row")
+      .filter({ hasText: "支付宝余额" });
+    await expect(ordinary).toContainText("仅理财收益");
+    await expect(ordinary.locator("td").nth(5)).toHaveText("—");
+    await ordinary
+      .getByRole("button", { name: "支付宝余额", exact: true })
+      .click();
+    await expect(page.getByTestId("investment-profit")).toHaveText("¥ 12.00");
+    await expect(page.getByTestId("investment-assets")).toHaveText("—");
+    await expect(
+      workspace.getByRole("button", { name: "更新证券余额", exact: true }),
+    ).toHaveCount(0);
+    await workspace
+      .getByRole("button", { name: "查看全部账户", exact: true })
+      .click();
+    await expect(page.getByTestId("investment-profit")).toHaveText("¥ 533.00");
+    await choose("理财分析账户", "合成理财产品");
+    await expect(page.getByTestId("investment-profit")).toHaveText("¥ 16.00");
+    await expect(page.getByTestId("investment-assets")).toHaveText(
+      "¥ 2,516.00",
+    );
+    await workspace
+      .getByRole("button", { name: "查看全部账户", exact: true })
+      .click();
+    await expect(page.getByTestId("investment-profit")).toHaveText("¥ 533.00");
+    console.log(
+      "PASS 理财产品纳入、普通账户仅计投资收益、排除工资与余额、账户点击及返回整体",
+    );
     await page.waitForTimeout(1200);
     await page.screenshot({
       path: path.join(dir, "investment-analysis.png"),

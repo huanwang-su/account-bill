@@ -6,6 +6,7 @@ from .account_config import AccountGraph
 from .models import AccountValuation, Entry, Transaction
 from .domain import DomainError
 from .financial_analysis import FinancialAnalysisService
+from .investment_scope import InvestmentScope
 
 
 class InvestmentAnalysisService:
@@ -34,27 +35,31 @@ class InvestmentAnalysisService:
         cutoff = end + " 23:59:59"
         with self.db.read() as s:
             graph = AccountGraph(s)
-            securities = {
-                a.id
-                for a in graph.accounts.values()
-                if not a.merged_into_id and a.role == "ASSET" and a.kind == "证券"
-            }
-            if account_id is not None:
-                selected = graph.canonical(account_id).id
-                if selected not in securities:
-                    raise DomainError("请选择证券资产账户")
-                scope = {selected}
-            else:
-                scope = securities
-            transactions = {
+            all_transactions = {
                 t.id: t
-                for t in s.query(Transaction).filter(Transaction.occurred_at <= cutoff)
+                for t in s.query(Transaction)
                 if t.status == "POSTED" and t.kind != "REVERSAL"
             }
-            entries = defaultdict(list)
+            all_entries = defaultdict(list)
             for entry in s.query(Entry):
-                if entry.transaction_id in transactions:
-                    entries[entry.transaction_id].append(entry)
+                if entry.transaction_id in all_transactions:
+                    all_entries[entry.transaction_id].append(entry)
+            investment_scope = InvestmentScope(s, graph, all_transactions, all_entries)
+            investment_assets = investment_scope.assets
+            if account_id is not None:
+                account = graph.canonical(account_id)
+                selected = account.id
+                if account.role != "ASSET":
+                    raise DomainError("请选择自有资产账户")
+                scope = {selected}
+            else:
+                scope = investment_scope.accounts
+            transactions = {
+                t.id: t for t in all_transactions.values() if t.occurred_at <= cutoff
+            }
+            entries = defaultdict(list)
+            for key in transactions:
+                entries[key] = all_entries[key]
             snapshots = [
                 v
                 for v in s.query(AccountValuation).filter(
@@ -66,7 +71,12 @@ class InvestmentAnalysisService:
             relevant = [
                 t
                 for t in transactions.values()
-                if any(graph.canonical(e.account_id).id in scope for e in entries[t.id])
+                if any(
+                    graph.canonical(e.account_id).id in scope & investment_assets
+                    for e in entries[t.id]
+                )
+                or t.id in investment_scope.returns
+                and investment_scope.returns[t.id][0] in scope
             ]
             start = start or min(
                 [t.occurred_at[:10] for t in relevant]
@@ -87,6 +97,10 @@ class InvestmentAnalysisService:
                 key: dict(
                     id=key,
                     name=graph.accounts[key].name,
+                    kind=graph.accounts[key].kind,
+                    analysis_mode=(
+                        "ASSET" if key in investment_assets else "INCOME_ONLY"
+                    ),
                     active=graph.accounts[key].active,
                     beginning=0,
                     ending=0,
@@ -123,13 +137,21 @@ class InvestmentAnalysisService:
                 signed = defaultdict(int)
                 for e in es:
                     key = graph.canonical(e.account_id).id
-                    if key in scope:
+                    if key in scope & investment_assets:
                         signed[key] += e.amount
+                if tx.id in investment_scope.returns:
+                    key, value = investment_scope.returns[tx.id]
+                    if key in scope - investment_assets:
+                        signed[key] = value
                 signed = {key: value for key, value in signed.items() if value}
                 if not signed:
                     continue
-                delta = sum(signed.values())
+                delta = sum(
+                    value for key, value in signed.items() if key in investment_assets
+                )
                 for key, value in signed.items():
+                    if key not in investment_assets:
+                        continue
                     accounts[key]["ending"] += value
                     if tx.occurred_at < lower:
                         accounts[key]["beginning"] += value
@@ -156,7 +178,7 @@ class InvestmentAnalysisService:
                         for e in es
                         if graph.canonical(e.account_id).role != "SYSTEM"
                     }
-                    internal = peers <= securities
+                    internal = peers <= investment_assets
                     for key, value in signed.items():
                         accounts[key][
                             (
@@ -204,13 +226,18 @@ class InvestmentAnalysisService:
                         ] += value
                         row["gain" if value > 0 else "loss"] += abs(value)
                         row["profit_count"] += 1
-                    bucket["profit"] += delta
-                    profits.append(dict(**detail, amount=delta, valuation=valuation))
+                    bucket["profit"] += sum(signed.values())
+                    profits.append(
+                        dict(**detail, amount=sum(signed.values()), valuation=valuation)
+                    )
                 else:
                     for key, value in signed.items():
                         accounts[key]["other_changes"] += value
             for row in accounts.values():
                 row["profit"] = row["valuation_profit"] + row["other_profit"]
+                row["asset_profit"] = (
+                    row["profit"] if row["analysis_mode"] == "ASSET" else 0
+                )
                 row["capital_net"] = row["capital_in"] - row["capital_out"]
                 row["internal_net"] = row["internal_in"] - row["internal_out"]
                 row["reconciled"] = (
@@ -219,7 +246,7 @@ class InvestmentAnalysisService:
                     + row["opening_added"]
                     + row["capital_net"]
                     + row["internal_net"]
-                    + row["profit"]
+                    + row["asset_profit"]
                     + row["other_changes"]
                 )
             totals = {
@@ -237,6 +264,7 @@ class InvestmentAnalysisService:
                     "valuation_profit",
                     "other_profit",
                     "profit",
+                    "asset_profit",
                     "gain",
                     "loss",
                     "profit_count",
@@ -266,6 +294,10 @@ class InvestmentAnalysisService:
                 grain=grain,
                 account_id=selected if account_id is not None else None,
                 account_count=len(accounts),
+                asset_account_count=len(scope & investment_assets),
+                income_only_count=len(scope - investment_assets),
+                income_only_profit=totals["profit"] - totals["asset_profit"],
+                available_accounts=investment_scope.options(scope),
                 internal_volume=internal_volume,
                 accounts=list(accounts.values()),
                 trend=trend,
@@ -276,7 +308,9 @@ class InvestmentAnalysisService:
                     transfers, key=lambda r: (r["occurred_at"], r["id"]), reverse=True
                 ),
                 missing_opening_ids=[
-                    r["id"] for r in accounts.values() if not r["opening_set"]
+                    r["id"]
+                    for r in accounts.values()
+                    if r["analysis_mode"] == "ASSET" and not r["opening_set"]
                 ],
                 reconciled=all(r["reconciled"] for r in accounts.values())
             )
