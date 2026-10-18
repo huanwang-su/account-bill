@@ -32,6 +32,9 @@ const statuses: Row = {
 };
 const stages: Row = {
   ORIGINAL: "原始导入文件",
+  ORIGINAL_ARCHIVE: "原始压缩包",
+  ACCOUNT_MAPPING: "账户归属确认",
+  SOURCE_OBSERVATIONS: "来源补充说明",
   NORMALIZED: "统一账单文件",
   CLASSIFIED: "AI 分类后账单",
   CLASSIFICATION_UPDATE: "AI 复核后账单",
@@ -190,7 +193,9 @@ export class ImportWorkspace extends React.Component<Props, State> {
       artifacts.find((a) => a.stage === "NORMALIZED");
     const original = artifacts.find((a) => a.stage === "ORIGINAL");
     const editable =
-      detail && ["NORMALIZED", "CLASSIFIED"].includes(detail.status);
+      detail &&
+      !detail.files_omitted &&
+      ["NORMALIZED", "CLASSIFIED"].includes(detail.status);
     const duplicateCount = (detail?.rows || []).filter(
       (r: Row) => r.duplicate,
     ).length;
@@ -226,9 +231,9 @@ export class ImportWorkspace extends React.Component<Props, State> {
             </p>
             <Space wrap>
               <Button
-                disabled={!normalized || busy}
+                disabled={!normalized || normalized.available === false || busy}
                 href={
-                  normalized
+                  normalized && normalized.available !== false
                     ? `/api/import-artifacts/${normalized.id}`
                     : undefined
                 }
@@ -254,11 +259,12 @@ export class ImportWorkspace extends React.Component<Props, State> {
                 type="primary"
                 loading={busy}
                 disabled={
-                  detail?.status !== "CLASSIFIED" &&
-                  !(
-                    detail?.status === "NORMALIZED" &&
-                    detail?.active_bill_count === 0
-                  )
+                  !!detail?.files_omitted ||
+                  (detail?.status !== "CLASSIFIED" &&
+                    !(
+                      detail?.status === "NORMALIZED" &&
+                      detail?.active_bill_count === 0
+                    ))
                 }
                 onClick={() => this.commit()}
               >
@@ -303,6 +309,15 @@ export class ImportWorkspace extends React.Component<Props, State> {
             <Empty description="还没有导入记录" />
           ) : (
             <>
+              {detail.files_omitted && (
+                <Alert
+                  className="mb"
+                  type="info"
+                  showIcon
+                  message="此账本从不含历史文件的备份恢复"
+                  description="账单、流水与关联历史仍保留；历史文件不可下载。未完成的导入请重新上传原账单。"
+                />
+              )}
               <Steps
                 size="small"
                 className="mb"
@@ -419,7 +434,10 @@ export class ImportWorkspace extends React.Component<Props, State> {
                       <>
                         <div>{name}</div>
                         <small className="muted">
-                          {(a.size / 1024).toFixed(1)} KB · {a.created_at}
+                          {a.available === false
+                            ? "文件未包含在备份中"
+                            : `${(a.size / 1024).toFixed(1)} KB`}{" "}
+                          · {a.created_at}
                         </small>
                       </>
                     ),
@@ -439,12 +457,21 @@ export class ImportWorkspace extends React.Component<Props, State> {
                     width: 160,
                     render: (_: unknown, a: Row) => (
                       <Space>
-                        <Button type="link" onClick={() => this.preview(a)}>
+                        <Button
+                          type="link"
+                          disabled={a.available === false}
+                          onClick={() => this.preview(a)}
+                        >
                           查看文件
                         </Button>
                         <Button
                           type="link"
-                          href={`/api/import-artifacts/${a.id}`}
+                          disabled={a.available === false}
+                          href={
+                            a.available === false
+                              ? undefined
+                              : `/api/import-artifacts/${a.id}`
+                          }
                         >
                           下载
                         </Button>
@@ -454,7 +481,7 @@ export class ImportWorkspace extends React.Component<Props, State> {
                 ]}
               />
               <p className="muted small">
-                文件按原内容保存，可查看或下载，随账本备份保留。再次保存分类文件会保留新版本。
+                可用文件按原内容保存，可查看或下载。数据管理下载的账本备份保留记录及文件信息，不包含文件内容。再次保存分类文件会保留新版本。
               </p>
               <Card title="退款匹配" className="mt mb">
                 <p>
@@ -464,7 +491,10 @@ export class ImportWorkspace extends React.Component<Props, State> {
                 <Space wrap>
                   <Button
                     href={`/api/import-runs/${detail.id}/refund-candidates`}
-                    disabled={["ERROR", "CANCELLED"].includes(detail.status)}
+                    disabled={
+                      !!detail.files_omitted ||
+                      ["ERROR", "CANCELLED"].includes(detail.status)
+                    }
                   >
                     下载退款候选
                   </Button>
@@ -473,13 +503,18 @@ export class ImportWorkspace extends React.Component<Props, State> {
                     className="refund-match-upload"
                     showUploadList={false}
                     disabled={
-                      busy || ["ERROR", "CANCELLED"].includes(detail.status)
+                      busy ||
+                      !!detail.files_omitted ||
+                      ["ERROR", "CANCELLED"].includes(detail.status)
                     }
                     beforeUpload={(f) => this.upload(f, "REFUND")}
                   >
                     <Button
                       loading={busy}
-                      disabled={["ERROR", "CANCELLED"].includes(detail.status)}
+                      disabled={
+                        !!detail.files_omitted ||
+                        ["ERROR", "CANCELLED"].includes(detail.status)
+                      }
                     >
                       保存 AI 退款匹配
                     </Button>

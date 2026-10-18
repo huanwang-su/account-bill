@@ -65,12 +65,12 @@ const api = async (p, method = "GET", data) => {
       page.locator("nav button").filter({ hasText: text }).click();
     await page.goto(url);
     await nav("数据");
-    await expect(page.getByText("数据备份", { exact: true })).toBeVisible();
+    await expect(page.getByText("数据备份与恢复", { exact: true })).toBeVisible();
     await expect(
       page.getByText("AI 分类与复核参考", { exact: true }),
     ).toHaveCount(0);
     await nav("设置");
-    await expect(page.getByText("数据备份", { exact: true })).toHaveCount(0);
+    await expect(page.getByText("数据备份与恢复", { exact: true })).toHaveCount(0);
     const reference = page.locator("#classification-reference");
     await reference.fill(
       (await reference.inputValue()) +

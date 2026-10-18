@@ -47,6 +47,8 @@ class ImportArtifactStore:
         artifact = self.latest(s, run_id, stage)
         if artifact is None:
             raise DomainError("该阶段尚无文件")
+        if not artifact.content:
+            raise DomainError("历史文件未包含在账本备份中，请重新上传原账单后处理")
         return BillDocument.read(artifact.content)
 
 
@@ -66,8 +68,9 @@ class BillImportWorkflow:
             raise DomainError("导入批次不存在")
         return run
 
-    def stage(self, content, filename, provider="auto"):
+    def stage(self, content, filename, provider="auto", start_at=None):
         """Keep failed originals too. No staged record becomes a visible bill."""
+        start_at = Clock.normalize(start_at) if start_at is not None else None
         batch_id = None
         existing = False
         doc = None
@@ -89,21 +92,35 @@ class BillImportWorkflow:
                 ),
                 "warnings": parsed.metadata.get("warnings", []),
             }
-            doc = self.normalizer.normalize(provider, parsed.rows)
+            selected = [
+                row
+                for row in parsed.rows
+                if not start_at or row["occurred_at"] >= start_at or row.get("error")
+            ]
+            if start_at:
+                summary.update(
+                    start_at=start_at,
+                    excluded_before_start=len(parsed.rows) - len(selected),
+                )
+                summary["warnings"] = [
+                    *summary["warnings"],
+                    f"仅导入 {start_at} 起的记录（含）；原文件完整保留，此前 {len(parsed.rows)-len(selected)} 条不转交易明细",
+                ]
+            doc = self.normalizer.normalize(provider, selected)
             errors = [
                 {"line": r["line"], "error": r["error"]}
-                for r in parsed.rows
+                for r in selected
                 if r.get("error")
             ]
             summary.update(
                 normalized_count=len(doc.bills),
                 ignored_bill_count=sum(r.bill_status == "IGNORED" for r in doc.bills),
                 conversion_errors=errors,
-                repeated_in_file=len(parsed.rows) - len(errors) - len(doc.bills),
+                repeated_in_file=len(selected) - len(errors) - len(doc.bills),
                 missing_transaction_ids=sum(not r.get("order_id") for r in parsed.rows),
             )
             # Source registration is separate from publishing unified bills.
-            batch = self.imports.upload(content, filename, provider)
+            batch = self.imports.upload(content, filename, provider, start_at=start_at)
             batch_id, existing = batch["id"], batch["existing"]
             if errors:
                 error = f"{len(errors)} 行解析失败，请核对原文件后重新导入"
@@ -114,8 +131,15 @@ class BillImportWorkflow:
         with self.db.write() as s:
             if doc is not None:
                 from .classification_policy import ClassificationPolicyService
+                from .source_observations import SourceObservationReconciler
 
                 doc.ai_reference = ClassificationPolicyService.reference_in(s)
+                observations = SourceObservationReconciler.reconcile(s, provider, doc)
+                if observations:
+                    summary["source_observation_count"] = len(observations)
+                    summary["warnings"].append(
+                        f"{len(observations)} 条已存在流水有后续状态、退款标记或亲属卡视角补充，保留原交易事实及新增来源说明，不重复入账"
+                    )
                 for record in doc.bills:
                     if BillStatusService.excluded(s, record.id):
                         previous = s.get(Bill, record.id)
@@ -139,6 +163,14 @@ class BillImportWorkflow:
             s.add(run)
             s.flush()
             self.artifacts.add(s, run.id, "ORIGINAL", filename, content)
+            if doc is not None and observations:
+                self.artifacts.add(
+                    s,
+                    run.id,
+                    "SOURCE_OBSERVATIONS",
+                    "来源补充说明.json",
+                    json.dumps(observations, ensure_ascii=False, indent=2).encode(),
+                )
             if doc is not None:
                 self.artifacts.add(
                     s,
@@ -308,6 +340,8 @@ class BillImportWorkflow:
             artifact = s.get(BillImportArtifact, artifact_id)
             if artifact is None:
                 raise DomainError("文件不存在")
+            if not artifact.content:
+                raise DomainError("历史文件未包含在账本备份中，无法下载")
             return artifact.filename, artifact.content
 
     def list(self):
@@ -335,6 +369,7 @@ class BillImportWorkflow:
                     "stage": a.stage,
                     "filename": a.filename,
                     "size": len(a.content),
+                    "available": bool(a.content),
                     "digest": a.digest,
                     "created_at": a.created_at,
                 }
@@ -348,6 +383,9 @@ class BillImportWorkflow:
         with self.db.read() as s:
             run = self._run(s, run_id)
             result = self._serialize(s, run)
+            result["files_omitted"] = any(
+                not item["available"] for item in result["artifacts"]
+            )
             artifact = (
                 self.artifacts.latest(s, run_id, "CLASSIFICATION_UPDATE")
                 or self.artifacts.latest(s, run_id, "CLASSIFIED")
@@ -371,7 +409,9 @@ class BillImportWorkflow:
 
             result["refund_matches"] = (
                 RefundMatchService(self.db).candidates_in(s, run_id)["refunds"]
-                if run.batch_id and run.status not in ("ERROR", "CANCELLED")
+                if run.batch_id
+                and run.status not in ("ERROR", "CANCELLED")
+                and not result["files_omitted"]
                 else []
             )
             from .models import RefundMatch
@@ -395,8 +435,36 @@ class BillImportWorkflow:
             result["rows"] = []
             from .models import BillNetting
 
-            if artifact:
-                for record in BillDocument.read(artifact.content).bills:
+            records = []
+            if artifact and artifact.content:
+                records = BillDocument.read(artifact.content).bills
+            elif run.batch_id:
+                # Current business rows remain inspectable without archived files.
+                from .bills import BillFacts
+
+                batch = s.get(ImportBatch, run.batch_id)
+                provider = json.loads(batch.metadata_json).get("parser", "alipay")
+                records = self.normalizer.normalize(
+                    provider,
+                    [
+                        json.loads(source.data)
+                        for source in s.query(ImportRow)
+                        .filter_by(batch_id=run.batch_id)
+                        .order_by(ImportRow.id)
+                    ],
+                ).bills
+                for record in records:
+                    saved = s.get(Bill, record.id)
+                    if saved:
+                        record.revision = saved.revision
+                        record.facts = BillFacts.model_validate_json(saved.facts)
+                        record.classification = (
+                            BillClassification.model_validate_json(saved.classification)
+                            if saved.classification != "null"
+                            else None
+                        )
+            if records:
+                for record in records:
                     if record.facts.settlement == "REFUNDED" and record.classification:
                         record.classification.category_path = ["退款"]
                     saved = s.get(Bill, record.id)

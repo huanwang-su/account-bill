@@ -36,6 +36,7 @@ export class PagedTable<T extends object> extends React.Component<
     return (
       <Table<T>
         {...props}
+        size={props.size ?? "middle"}
         pagination={{
           current: Math.min(
             this.state.current,
@@ -43,7 +44,8 @@ export class PagedTable<T extends object> extends React.Component<
           ),
           pageSize: this.state.pageSize,
           total,
-          showSizeChanger: true,
+          showSizeChanger: total > (defaultPageSize ?? 15),
+          hideOnSinglePage: total <= (defaultPageSize ?? 15),
           pageSizeOptions: [
             ...new Set([defaultPageSize ?? 15, 10, 20, 50, 100]),
           ]

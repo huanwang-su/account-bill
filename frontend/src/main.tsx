@@ -1,10 +1,9 @@
+import { ReportPeriodFilter } from "./ReportPeriodFilter";
 import "@ant-design/v5-patch-for-react-19";
 import React from "react";
 import { createRoot } from "react-dom/client";
 import {
   Collapse,
-  ConfigProvider,
-  App as AntApp,
   Button,
   Card,
   Table,
@@ -24,25 +23,14 @@ import {
   Descriptions,
   message,
   Tooltip,
-  Tabs,
 } from "antd";
-import zhCN from "antd/locale/zh_CN";
 import {
-  FileDoneOutlined,
-  AppstoreOutlined,
-  WalletOutlined,
-  SwapOutlined,
-  CloudUploadOutlined,
-  TagsOutlined,
-  BarChartOutlined,
-  SettingOutlined,
   PlusOutlined,
   ArrowUpOutlined,
   ArrowDownOutlined,
   DownloadOutlined,
   SearchOutlined,
   ArrowRightOutlined,
-  InboxOutlined,
 } from "@ant-design/icons";
 import dayjs from "dayjs";
 import {
@@ -56,6 +44,8 @@ import {
 import "./style.css";
 import { PagedTable } from "./PagedTable";
 import { BillWorkspace } from "./BillWorkspace";
+import { BillAttention } from "./BillReviewModel";
+import { DataBackupPanel } from "./DataBackupPanel";
 import { ImportWorkspace } from "./ImportWorkspace";
 import { CatalogWorkspace } from "./CatalogWorkspace";
 import { AccountWorkspace } from "./AccountWorkspace";
@@ -63,9 +53,26 @@ import { AccountSettings } from "./AccountSettings";
 import { ClassificationSettings } from "./ClassificationSettings";
 import { BalanceSheetWorkspace } from "./BalanceSheetWorkspace";
 import { FinancialAnalysisWorkspace } from "./FinancialAnalysisWorkspace";
-import { Chart } from "./Chart";
+import { FundFlowWorkspace } from "./FundFlowWorkspace";
+import {
+  AppearanceProvider,
+  AppearanceSettings,
+  Appearance,
+} from "./Appearance";
+import { ReportCharts } from "./ReportCharts";
 import { CounterpartyWorkspace } from "./CounterpartyWorkspace";
 import { InvestmentWorkspace } from "./InvestmentWorkspace";
+import { AnalysisSettings } from "./AnalysisSettings";
+import { SingleAccountWorkspace } from "./SingleAccountWorkspace";
+import { IncomeWorkspace } from "./IncomeWorkspace";
+import { ExpenseWorkspace } from "./ExpenseWorkspace";
+import { Navigation } from "./Navigation";
+import { WorkspaceHeader } from "./WorkspaceHeader";
+import { WorkspaceContent } from "./WorkspaceContent";
+import { SidebarNavigation } from "./SidebarNavigation";
+import { OverviewWorkspace } from "./OverviewWorkspace";
+
+import { ReportDetailReading } from "./ReportDetailReading";
 
 const kindNames: Row = {
   EXPENSE: "支出",
@@ -89,12 +96,16 @@ interface State {
   page: string;
   reportTab: string;
   counterpartyAccountId?: number;
+  singleAccountId?: number;
+  singleAccountFilters?: Row;
   accounts: Row[];
   groups: Row[];
   categories: Row[];
   tags: Row[];
   transactions: Row[];
   summary: Row;
+  reportScopeKey: string;
+  reportRefreshing: boolean;
   batches: Row[];
   rows: Row[];
   batch?: number;
@@ -114,31 +125,39 @@ interface State {
 }
 class LedgerApp extends React.Component<{}, State> {
   api = new LedgerApi();
+  refreshVersion = 0;
   form = React.createRef<any>();
   state: State = {
-    page: "bills",
-    reportTab: "analysis",
+    page: "overview",
+    reportTab: "balance-sheet",
     accounts: [],
     groups: [],
     categories: [],
     tags: [],
     transactions: [],
     summary: {},
+    reportScopeKey: "",
+    reportRefreshing: true,
     batches: [],
     rows: [],
-    filters: {},
+    filters: ReportPeriodFilter.defaults(),
     formKind: "EXPENSE",
     busy: false,
     loading: true,
     saved: [],
     importFilter: "ALL",
-    billFilters: {},
+    billFilters: ReportPeriodFilter.defaults(),
     pendingBillCount: 0,
   };
   async componentDidMount() {
     await this.refresh();
   }
+  componentWillUnmount() {
+    this.refreshVersion++;
+  }
   async refresh() {
+    const version = ++this.refreshVersion;
+    this.setState({ reportRefreshing: true });
     try {
       const query = this.api.query(this.state.filters);
       const [
@@ -164,7 +183,10 @@ class LedgerApp extends React.Component<{}, State> {
           "/bills?ledger_status=PENDING",
         ].map((p) => this.api.request(p)),
       );
+      if (version !== this.refreshVersion) return;
       this.setState({
+        reportScopeKey: query,
+        reportRefreshing: false,
         accounts,
         groups,
         categories,
@@ -178,8 +200,9 @@ class LedgerApp extends React.Component<{}, State> {
       });
       if (this.state.batch) await this.loadBatch(this.state.batch);
     } catch (e) {
+      if (version !== this.refreshVersion) return;
       this.fail(e);
-      this.setState({ loading: false });
+      this.setState({ loading: false, reportRefreshing: false });
     }
   }
   fail(e: unknown) {
@@ -336,19 +359,11 @@ class LedgerApp extends React.Component<{}, State> {
   renderFilters() {
     return (
       <div className="filters">
-        <DatePicker.RangePicker
-          aria-label="筛选日期"
-          value={
-            this.state.filters.start && this.state.filters.end
-              ? [dayjs(this.state.filters.start), dayjs(this.state.filters.end)]
-              : null
-          }
-          onChange={(v) =>
-            this.setFilter({
-              start: v?.[0]?.format("YYYY-MM-DD"),
-              end: v?.[1]?.format("YYYY-MM-DD"),
-            })
-          }
+        <ReportPeriodFilter
+          refreshKey={String(this.state.transactions[0]?.occurred_at || "")}
+          filters={this.state.filters}
+          label="筛选日期"
+          onChange={(patch) => this.setFilter(patch)}
         />
         <Select
           allowClear
@@ -391,7 +406,11 @@ class LedgerApp extends React.Component<{}, State> {
           onSearch={(v) => this.setFilter({ q: v })}
         />
         <Button
-          onClick={() => this.setState({ filters: {} }, () => this.refresh())}
+          onClick={() =>
+            this.setState({ filters: ReportPeriodFilter.defaults() }, () =>
+              this.refresh(),
+            )
+          }
         >
           重置
         </Button>
@@ -399,134 +418,51 @@ class LedgerApp extends React.Component<{}, State> {
     );
   }
   renderMetrics() {
-    const { summary, accounts } = this.state;
-    const total = accounts
-      .filter(
-        (a) =>
-          ["ASSET", "LIABILITY"].includes(a.role) &&
-          !a.merged_into_id &&
-          (!this.state.filters.group_id ||
-            this.state.groups
-              .find((g) => g.id === this.state.filters.group_id)
-              ?.account_ids.includes(a.id)),
-      )
-      .reduce((s, a) => s + a.balance, 0);
+    const { summary, transactions } = this.state;
+    const reading = new ReportDetailReading(summary, transactions);
     return (
       <div className="metrics">
         <div className="metric featured">
-          <span>账面净资产</span>
-          <strong>¥ {Money.format(total)}</strong>
-          <small>自有资产与负债 · 全部时间</small>
-          <Button
-            className="balance-overview-link"
-            type="link"
-            size="small"
-            onClick={() =>
-              this.setState({ page: "reports", reportTab: "balance-sheet" })
-            }
-          >
-            查看资产负债表 <ArrowRightOutlined />
-          </Button>
+          <span>当前范围收支结余</span>
+          <strong>¥ {Money.format(summary.net)}</strong>
+          <small>收入 − 净支出，不代表账户余额</small>
         </div>
         <div className="metric">
           <span>
             <ArrowDownOutlined /> 收入
           </span>
           <strong className="income">¥ {Money.format(summary.income)}</strong>
-          <small>当前筛选范围</small>
+          <small>当前筛选范围，含筛选内的证券盈利</small>
         </div>
         <div className="metric">
           <span>
-            <ArrowUpOutlined /> 支出
+            <ArrowUpOutlined /> 净支出
           </span>
           <strong>¥ {Money.format(summary.expense)}</strong>
-          <small>已扣除退款</small>
+          <small>已扣除退款，含筛选内的证券亏损</small>
         </div>
         <div className="metric">
-          <span>净收支</span>
-          <strong>¥ {Money.format(summary.net)}</strong>
-          <small>{summary.count || 0} 笔有效记录 · 转账不计收支</small>
+          <span>其中：独立退款抵减</span>
+          <strong>¥ {Money.format(reading.refunds)}</strong>
+          <small>{reading.count("REFUND")} 笔退款，已在净支出中扣除</small>
         </div>
       </div>
     );
   }
   renderCharts() {
-    const s = this.state.summary;
+    const scopeKey = this.api.query(this.state.filters);
     return (
-      <div className="chart-grid">
-        <Card
-          title="收支趋势"
-          extra={<span className="muted">按月汇总 · 元</span>}
-        >
-          {s.months?.length ? (
-            <Chart
-              option={{
-                tooltip: { trigger: "axis" },
-                legend: { bottom: 0 },
-                grid: { left: 55, right: 20, top: 20, bottom: 55 },
-                xAxis: {
-                  type: "category",
-                  data: s.months.map((m: Row) => m.month),
-                  axisTick: { show: false },
-                },
-                yAxis: {
-                  type: "value",
-                  splitLine: { lineStyle: { color: "#edf0ee" } },
-                },
-                series: [
-                  {
-                    name: "收入",
-                    type: "bar",
-                    barMaxWidth: 24,
-                    itemStyle: { color: "#96c7b1", borderRadius: [4, 4, 0, 0] },
-                    data: s.months.map((m: Row) => m.income / 100),
-                  },
-                  {
-                    name: "支出",
-                    type: "bar",
-                    barMaxWidth: 24,
-                    itemStyle: { color: "#2d6452", borderRadius: [4, 4, 0, 0] },
-                    data: s.months.map((m: Row) => m.expense / 100),
-                  },
-                ],
-              }}
-            />
-          ) : (
-            <Empty description="记下第一笔，开始观察收支变化" />
-          )}
-        </Card>
-        <Card
-          title="支出分类"
-          extra={<span className="muted">扣除退款后</span>}
-        >
-          {s.categories?.some((c: Row) => c.value !== 0) ? (
-            <Chart
-              option={{
-                tooltip: { trigger: "axis" },
-                grid: { left: 100, right: 35, top: 12, bottom: 30 },
-                xAxis: { type: "value" },
-                yAxis: {
-                  type: "category",
-                  inverse: true,
-                  data: s.categories.slice(0, 6).map((c: Row) => c.name),
-                },
-                series: [
-                  {
-                    type: "bar",
-                    barMaxWidth: 18,
-                    itemStyle: { color: "#73a58f", borderRadius: [0, 4, 4, 0] },
-                    data: s.categories
-                      .slice(0, 6)
-                      .map((c: Row) => c.value / 100),
-                  },
-                ],
-              }}
-            />
-          ) : (
-            <Empty description="确认支出后查看分类分布" />
-          )}
-        </Card>
-      </div>
+      <ReportCharts
+        summary={this.state.summary}
+        transactions={this.state.transactions}
+        scopeKey={scopeKey}
+        loading={
+          this.state.loading ||
+          this.state.reportRefreshing ||
+          this.state.reportScopeKey !== scopeKey
+        }
+        onDetail={(row) => this.open("detail", row)}
+      />
     );
   }
   transactionColumns: any[] = [
@@ -644,75 +580,50 @@ class LedgerApp extends React.Component<{}, State> {
     },
   ];
   renderOverview() {
-    const pending = this.state.pendingBillCount;
     return (
-      <>
-        {this.renderMetrics()}
-        {this.state.accounts.some(
-          (a) => a.role !== "SYSTEM" && !a.merged_into_id && !a.opening_set,
-        ) && (
-          <Alert
-            className="mb"
-            type="info"
-            showIcon
-            message="尚有账户未设置期初余额，账面余额仅代表已记录的累计变动。"
-            action={
-              <Button
-                size="small"
-                type="link"
-                onClick={() => this.setState({ page: "accounts" })}
-              >
-                设置期初
-              </Button>
-            }
-          />
-        )}{" "}
-        {pending > 0 && (
-          <div className="import-banner">
-            <InboxOutlined />
-            <div>
-              <strong>{pending} 条记录待确认入账</strong>
-              <p>确认交易性质、账户或退款关联后，才能计入余额和收支统计。</p>
-            </div>
-            <Button
-              onClick={() =>
-                this.setState({
-                  page: "bills",
-                  billFilters: { ledger_status: "PENDING" },
-                })
-              }
-            >
-              查看待处理 <ArrowRightOutlined />
-            </Button>
-          </div>
-        )}
-        {this.renderCharts()}
-        <Card
-          title="最近流水"
-          extra={
-            <Button
-              type="link"
-              onClick={() => this.setState({ page: "transactions" })}
-            >
-              查看全部 →
-            </Button>
-          }
-        >
-          <Table
-            size="middle"
-            rowKey="id"
-            columns={this.transactionColumns}
-            dataSource={this.state.transactions.slice(0, 6)}
-            pagination={false}
-            scroll={{ x: 950 }}
-            locale={{
-              emptyText: (
-                <Empty description="还没有流水，可以手动记账或导入原始账单" />
-              ),
-            }}
-          />
-        </Card>
-      </>
+      <OverviewWorkspace
+        onSingleAccount={(accountId, filters) =>
+          this.setState({
+            page: "reports",
+            reportTab: "single-accounts",
+            singleAccountId: accountId,
+            singleAccountFilters: filters,
+          })
+        }
+        onConfigure={() => this.setState({ page: "analysis-settings" })}
+        refreshKey={JSON.stringify([
+          this.state.accounts,
+          this.state.groups,
+          this.state.transactions,
+          this.state.batches,
+          this.state.pendingBillCount,
+        ])}
+        onReport={(reportTab) => {
+          if (reportTab === "details")
+            this.setState(
+              {
+                page: "reports",
+                reportTab,
+                filters: ReportPeriodFilter.defaults(),
+              },
+              () => this.refresh(),
+            );
+          else this.setState({ page: "reports", reportTab });
+        }}
+        onAccounts={() => this.setState({ page: "accounts" })}
+        onPending={() =>
+          this.setState({
+            page: "bills",
+            billFilters: BillAttention.filters(),
+          })
+        }
+        onImport={() => {
+          this.setState({ page: "imports" });
+          if (!this.state.batch && this.state.batches[0])
+            this.loadBatch(this.state.batches[0].id);
+        }}
+        onDetail={(row) => this.open("detail", row)}
+      />
     );
   }
   renderAccounts() {
@@ -1042,6 +953,7 @@ class LedgerApp extends React.Component<{}, State> {
         </div>
         {this.renderFilters()}
         {this.renderMetrics()}
+
         {this.renderCharts()}
         <Card
           title="统计明细"
@@ -1071,75 +983,127 @@ class LedgerApp extends React.Component<{}, State> {
       this.state.tags,
       this.state.transactions,
     ]);
+    const items = [
+      {
+        key: "income",
+        label: "收入分析",
+        children: (
+          <IncomeWorkspace
+            accounts={this.state.accounts}
+            groups={this.state.groups}
+            categories={this.state.categories}
+            refreshKey={refreshKey}
+            onConfigure={() => this.setState({ page: "analysis-settings" })}
+            onDetail={(row) => this.open("detail", row)}
+          />
+        ),
+      },
+      {
+        key: "expenses",
+        label: "支出分析",
+        children: (
+          <ExpenseWorkspace
+            groups={this.state.groups}
+            accounts={this.state.accounts}
+            categories={this.state.categories}
+            refreshKey={refreshKey}
+            onConfigure={() => this.setState({ page: "analysis-settings" })}
+            onDetail={(row) => this.open("detail", row)}
+          />
+        ),
+      },
+      {
+        key: "analysis",
+        label: "收支分析",
+        children: (
+          <FinancialAnalysisWorkspace
+            accounts={this.state.accounts}
+            groups={this.state.groups}
+            categories={this.state.categories}
+            tags={this.state.tags}
+            refreshKey={refreshKey}
+            onDetail={(row) => this.open("detail", row)}
+          />
+        ),
+      },
+      {
+        key: "single-accounts",
+        label: "单账户分析",
+        children: (
+          <SingleAccountWorkspace
+            initialAccountId={this.state.singleAccountId}
+            initialFilters={this.state.singleAccountFilters}
+            refreshKey={refreshKey}
+            onConfigure={() => this.setState({ page: "analysis-settings" })}
+            onDetail={(row) => this.open("detail", row)}
+          />
+        ),
+      },
+      {
+        key: "counterparties",
+        label: "交易方分析",
+        children: (
+          <CounterpartyWorkspace
+            accounts={this.state.accounts}
+            initialAccountId={this.state.counterpartyAccountId}
+            refreshKey={refreshKey}
+            onDetail={(row) => this.open("detail", row)}
+            onValuation={(account) => this.open("valuation", account)}
+          />
+        ),
+      },
+      {
+        key: "investments",
+        label: "理财分析",
+        children: (
+          <InvestmentWorkspace
+            groups={this.state.groups}
+            accounts={this.state.accounts}
+            refreshKey={refreshKey}
+            onDetail={(row) => this.open("detail", row)}
+            onUpdate={(account) => this.open("valuation", account)}
+            onAccounts={() => this.setState({ page: "accounts" })}
+          />
+        ),
+      },
+      {
+        key: "fund-flow",
+        label: "资金流转",
+        children: (
+          <FundFlowWorkspace
+            accounts={this.state.accounts}
+            groups={this.state.groups}
+            refreshKey={refreshKey}
+            onDetail={(row) => this.open("detail", row)}
+          />
+        ),
+      },
+      {
+        key: "details",
+        label: "统计明细",
+        children: this.renderReportDetails(),
+      },
+      {
+        key: "balance-sheet",
+        label: "资产负债表",
+        children: (
+          <BalanceSheetWorkspace
+            groups={this.state.groups}
+            refreshKey={refreshKey}
+            onAccounts={() => this.setState({ page: "accounts" })}
+          />
+        ),
+      },
+    ];
     return (
-      <Tabs
-        className="report-tabs"
-        activeKey={this.state.reportTab}
-        onChange={(reportTab) => this.setState({ reportTab })}
-        items={[
-          {
-            key: "analysis",
-            label: "收支分析",
-            children: (
-              <FinancialAnalysisWorkspace
-                accounts={this.state.accounts}
-                groups={this.state.groups}
-                categories={this.state.categories}
-                tags={this.state.tags}
-                refreshKey={refreshKey}
-                onDetail={(row) => this.open("detail", row)}
-              />
-            ),
-          },
-          {
-            key: "counterparties",
-            label: "交易方分析",
-            children: (
-              <CounterpartyWorkspace
-                accounts={this.state.accounts}
-                initialAccountId={this.state.counterpartyAccountId}
-                refreshKey={refreshKey}
-                onDetail={(row) => this.open("detail", row)}
-                onValuation={(account) => this.open("valuation", account)}
-              />
-            ),
-          },
-          {
-            key: "investments",
-            label: "理财",
-            children: (
-              <InvestmentWorkspace
-                accounts={this.state.accounts}
-                refreshKey={refreshKey}
-                onDetail={(row) => this.open("detail", row)}
-                onUpdate={(account) => this.open("valuation", account)}
-                onAccounts={() => this.setState({ page: "accounts" })}
-              />
-            ),
-          },
-          {
-            key: "details",
-            label: "统计明细",
-            children: this.renderReportDetails(),
-          },
-          {
-            key: "balance-sheet",
-            label: "资产负债表",
-            children: (
-              <BalanceSheetWorkspace
-                groups={this.state.groups}
-                refreshKey={refreshKey}
-                onAccounts={() => this.setState({ page: "accounts" })}
-              />
-            ),
-          },
-        ]}
-      />
+      items.find((item) => item.key === this.state.reportTab)?.children ||
+      items.find((item) => item.key === "balance-sheet")!.children
     );
   }
   renderSettings() {
     return (
       <>
+        <AppearanceSettings />
         <ClassificationSettings onChanged={() => this.refresh()} />
         <AccountSettings
           accounts={this.state.accounts}
@@ -1149,23 +1113,31 @@ class LedgerApp extends React.Component<{}, State> {
       </>
     );
   }
+  async restoredData() {
+    await new Promise<void>((resolve) =>
+      this.setState(
+        {
+          filters: ReportPeriodFilter.defaults(),
+          billFilters: ReportPeriodFilter.defaults(),
+          batch: undefined,
+          rows: [],
+          integrity: undefined,
+          modal: undefined,
+          editing: undefined,
+          singleAccountId: undefined,
+          singleAccountFilters: undefined,
+          counterpartyAccountId: undefined,
+        },
+        resolve,
+      ),
+    );
+    await this.refresh();
+  }
   renderData() {
     return (
       <>
         <div className="settings-grid">
-          <Card title="数据备份">
-            <p>下载包含账户、流水、分类和导入原始记录的完整账本。</p>
-            <Button
-              type="primary"
-              icon={<DownloadOutlined />}
-              href="/api/backup"
-            >
-              下载完整备份
-            </Button>
-            <p className="muted small">
-              恢复备份：关闭运行服务后，双击项目中的“恢复备份.command”，按提示选择备份文件。恢复前会自动保存原账本。
-            </p>
-          </Card>
+          <DataBackupPanel onRestored={() => this.restoredData()} />
           <Card title="账目一致性">
             <p>逐笔检查流水是否平衡。账户余额实时由流水累计计算。</p>
             <Button
@@ -1398,6 +1370,8 @@ class LedgerApp extends React.Component<{}, State> {
                     "银行卡",
                     "现金",
                     "信用卡",
+                    "公司贷款",
+                    "房贷",
                     "理财",
                     "证券",
                     "其他",
@@ -1421,6 +1395,14 @@ class LedgerApp extends React.Component<{}, State> {
                       (x) => x.name === t.value && x.scope === "TRANSACTION",
                     ),
                 )}
+              />
+            </Form.Item>
+            <Form.Item name="note" label="账户备注">
+              <Input.TextArea
+                rows={3}
+                maxLength={2000}
+                showCount
+                placeholder="例如：每月还款金额、还款截止月份等"
               />
             </Form.Item>
             <Form.Item name="active" label="启用账户" valuePropName="checked">
@@ -1775,27 +1757,17 @@ class LedgerApp extends React.Component<{}, State> {
     );
   }
   render() {
-    const nav = [
-      ["overview", "总览", <AppstoreOutlined />],
-      ["accounts", "账户管理", <WalletOutlined />],
-      ["bills", "交易明细", <FileDoneOutlined />],
-      ["transactions", "账户流水", <SwapOutlined />],
-      ["imports", "账单导入", <CloudUploadOutlined />],
-      ["catalog", "分类与标签", <TagsOutlined />],
-      ["reports", "统计报表", <BarChartOutlined />],
-      ["data", "数据", <DownloadOutlined />],
-      ["settings", "设置", <SettingOutlined />],
-    ];
     const subtitles: Row = {
       bills: "已导入的统一账单，按流水号追溯。",
-      overview: "看清每笔收支，让生活心中有数。",
+      overview: "家庭资产、本月生活收支、理财表现与待办，一屏掌握。",
       accounts: "按家庭和个人分组，查看账户归属与余额。",
       transactions: "每一笔变动，都有迹可循。",
       imports: "从一份账单，整理你的日常。",
       catalog: "用分类和标签，建立自己的记账习惯。",
-      reports: "分析收支、分类与大额交易，查看资产负债。",
+      reports: "分析家庭开支、收支与理财，查看资产负债分布。",
       data: "备份与检查你的本地账本。",
       settings: "管理账户配置和 AI 分类参考。",
+      "analysis-settings": "统一管理报表默认值、屏蔽名单与关注账户。",
     };
     const titles: Row = {
       account: "账户信息",
@@ -1816,58 +1788,81 @@ class LedgerApp extends React.Component<{}, State> {
           <div className="brand">
             <span className="brand-mark">有</span>
             <div>
-              有数<small>LOCAL LEDGER</small>
+              有数<small>家庭财务</small>
             </div>
           </div>
           <div className="ledger-label">我的本地账本</div>
-          <nav>
-            {nav.map(([key, label, icon]) => (
-              <button
-                key={String(key)}
-                className={this.state.page === key ? "active" : ""}
-                onClick={() =>
-                  this.setState({ page: String(key), billFilters: {} }, () => {
-                    if (
-                      key === "imports" &&
-                      !this.state.batch &&
-                      this.state.batches[0]
-                    )
-                      this.loadBatch(this.state.batches[0].id);
-                  })
-                }
-              >
-                {icon}
-                {label}
-              </button>
-            ))}
-          </nav>
+          <SidebarNavigation
+            page={this.state.page}
+            reportTab={this.state.reportTab}
+            pendingBillCount={this.state.pendingBillCount}
+            onPending={() =>
+              this.setState({
+                page: "bills",
+                billFilters: BillAttention.filters(),
+              })
+            }
+            onNavigate={(page, reportTab) =>
+              this.setState(
+                {
+                  page,
+                  reportTab: reportTab || this.state.reportTab,
+                  billFilters: ReportPeriodFilter.defaults(),
+                },
+                () => {
+                  if (
+                    page === "imports" &&
+                    !this.state.batch &&
+                    this.state.batches[0]
+                  )
+                    this.loadBatch(this.state.batches[0].id);
+                },
+              )
+            }
+          />
           <div className="sidebar-foot">
             <span className="status-dot" /> 本地存储 · 人民币
             <small>数据留在你的电脑</small>
           </div>
         </aside>
-        <main>
-          <header>
-            <div>
-              <div className="eyebrow">PERSONAL FINANCE / 个人财务</div>
-              <h1>{nav.find((n) => n[0] === this.state.page)?.[1]}</h1>
-              <p>{subtitles[this.state.page]}</p>
-            </div>
-            <Space>
-              <span className="today">
-                {dayjs().format("YYYY 年 M 月 D 日")}
-              </span>
-              <Button
-                type="primary"
-                icon={<PlusOutlined />}
-                size="large"
-                onClick={() => this.open("transaction")}
-              >
-                记一笔
-              </Button>
-            </Space>
-          </header>
-          <div className="page-content">
+        <main data-page={this.state.page}>
+          <WorkspaceHeader
+            title={
+              Navigation.target(this.state.page, this.state.reportTab).label
+            }
+            section={
+              Navigation.sections.find(
+                (section) =>
+                  section.key ===
+                  Navigation.parent(
+                    Navigation.target(this.state.page, this.state.reportTab)
+                      .key,
+                  ),
+              )?.label
+            }
+            description={
+              ["reports", "accounts"].includes(this.state.page)
+                ? undefined
+                : subtitles[this.state.page]
+            }
+            actions={
+              <Space size={12}>
+                <span className="today">
+                  {dayjs().format("YYYY 年 M 月 D 日")}
+                </span>
+                <Button
+                  type={this.state.page === "accounts" ? "default" : "primary"}
+                  icon={<PlusOutlined />}
+                  onClick={() => this.open("transaction")}
+                >
+                  记一笔
+                </Button>
+              </Space>
+            }
+          />
+          <WorkspaceContent
+            route={Navigation.target(this.state.page, this.state.reportTab).key}
+          >
             {this.state.loading ? (
               <Card loading />
             ) : this.state.page === "bills" ? (
@@ -1892,12 +1887,23 @@ class LedgerApp extends React.Component<{}, State> {
               this.renderCatalog()
             ) : this.state.page === "reports" ? (
               this.renderReports()
+            ) : this.state.page === "analysis-settings" ? (
+              <AnalysisSettings
+                accounts={this.state.accounts}
+                onChanged={() => this.refresh()}
+                onSingleAccounts={() =>
+                  this.setState({
+                    page: "reports",
+                    reportTab: "single-accounts",
+                  })
+                }
+              />
             ) : this.state.page === "data" ? (
               this.renderData()
             ) : (
               this.renderSettings()
             )}
-          </div>
+          </WorkspaceContent>
           <footer>
             有数 · 每一笔，都算数 <span>本地账本 v0.18</span>
           </footer>
@@ -1916,30 +1922,14 @@ class LedgerApp extends React.Component<{}, State> {
     );
   }
 }
+Appearance.apply(
+  Appearance.resolve(
+    Appearance.read(),
+    window.matchMedia("(prefers-color-scheme: dark)").matches,
+  ),
+);
 createRoot(document.getElementById("root")!).render(
-  <ConfigProvider
-    locale={zhCN}
-    theme={{
-      token: {
-        colorPrimary: "#28664f",
-        colorInfo: "#28664f",
-        colorInfoBg: "#edf5ef",
-        colorInfoBorder: "#d9e6db",
-        borderRadius: 9,
-        fontFamily:
-          '-apple-system,BlinkMacSystemFont,"PingFang SC","Microsoft YaHei",sans-serif',
-        colorText: "#25332e",
-        colorBgLayout: "#f5f6f2",
-      },
-      components: {
-        Table: { headerBg: "#f5f7f4", headerColor: "#7a857e" },
-        Card: { headerFontSize: 16 },
-        Button: { primaryShadow: "none" },
-      },
-    }}
-  >
-    <AntApp>
-      <LedgerApp />
-    </AntApp>
-  </ConfigProvider>,
+  <AppearanceProvider>
+    <LedgerApp />
+  </AppearanceProvider>,
 );

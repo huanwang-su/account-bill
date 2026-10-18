@@ -22,6 +22,7 @@ class Account(Base):
     id = Column(Integer, primary_key=True)
     name = Column(String, nullable=False, unique=True)
     number = Column(String, default="")
+    note = Column(Text, nullable=False, default="")
     role = Column(String, nullable=False, default="ASSET")
     kind = Column(String, default="其他")
     tags = Column(Text, default="[]")
@@ -312,3 +313,11 @@ class TransferMatch(Base):
     transaction_id = Column(Integer, ForeignKey("transactions.id"), nullable=False)
     note = Column(Text, nullable=False)
     created_at = Column(String, nullable=False)
+
+
+class AnalysisSettings(Base):
+    __tablename__ = "analysis_settings"
+    id = Column(Integer, primary_key=True)
+    revision = Column(Integer, nullable=False)
+    content = Column(Text, nullable=False)
+    updated_at = Column(String, nullable=False)

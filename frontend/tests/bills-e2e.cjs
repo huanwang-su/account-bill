@@ -190,7 +190,7 @@ async function api(p) {
       .getByRole("button", { name: "核对入账", exact: true })
       .click();
     await page
-      .getByLabel("收付款账户（转账为转出账户）", { exact: true })
+      .getByLabel("付款账户", { exact: true })
       .click();
     await page
       .locator(".ant-select-item-option-content")

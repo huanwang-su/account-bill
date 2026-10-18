@@ -137,6 +137,24 @@ def test_single_voucher_transfer_does_not_require_mirror_bill(db):
     assert balance(db, 5) == balance(db, 6) == 0
 
 
+def test_later_vouchers_attach_to_existing_transfer_without_posting_again(db):
+    flow, run, data = transfers(db)
+    service = ConfirmedTransferService(db)
+    first = service.confirm({**data, "source_ids": []})
+    result = service.confirm(data)
+    assert (
+        result["already_confirmed"]
+        and result["transaction_id"] == first["transaction_id"]
+    )
+    assert service.confirm(data)["already_confirmed"]
+    with db.read() as session:
+        assert session.query(Transaction).count() == 1
+    assert balance(db, 5) == -10000 and balance(db, 6) == 10000
+    assert len(flow.bills.list()) == 1 and flow.bills.list()[0]["source_count"] == 3
+    flow.cancel(run)
+    assert balance(db, 5) == balance(db, 6) == 0
+
+
 def test_confirm_transfer_rejects_account_or_amount_conflict_atomically(db):
     flow, run, data = transfers(db)
     data["to_account_id"] = 7

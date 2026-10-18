@@ -240,7 +240,7 @@ class ImportService:
         self.registry = registry or ParserRegistry()
         self.account_resolver = AlipayAccountResolver()
 
-    def upload(self, content, filename, provider="alipay"):
+    def upload(self, content, filename, provider="alipay", start_at=None):
         digest = hashlib.sha256(content).hexdigest()
         provider = (
             self.registry.detect(content, filename) if provider == "auto" else provider
@@ -248,7 +248,14 @@ class ImportService:
         statement = self.registry.get(provider).parse(content, filename)
         with self.db.write() as s:
             if provider == "alipay":
-                BillStatusService(self.db).apply_rows(s, statement.rows)
+                BillStatusService(self.db).apply_rows(
+                    s,
+                    [
+                        r
+                        for r in statement.rows
+                        if not start_at or r["occurred_at"] >= start_at
+                    ],
+                )
             old = s.query(ImportBatch).filter_by(digest=digest).first()
             if old:
                 return {"id": old.id, "existing": True}
@@ -275,7 +282,12 @@ class ImportService:
                 decision = {}
                 state = "REVIEW"
                 method = d["method"]
-                match = StatementAccountResolver().resolve(s, provider, statement, d)
+                in_scope = not start_at or d["occurred_at"] >= start_at
+                match = (
+                    StatementAccountResolver().resolve(s, provider, statement, d)
+                    if in_scope
+                    else None
+                )
                 if d.get("review_reason"):
                     warning.append(d["review_reason"])
                 if match:
@@ -321,7 +333,10 @@ class ImportService:
                     for r in candidates
                 ):
                     warning.append("存在同时间、金额和对方的疑似重复记录")
-                if d["error"]:
+                if not in_scope and not d["error"]:
+                    state = "IGNORED"
+                    warning = ["早于本次导入起始时间，保留来源，不生成交易明细"]
+                elif d["error"]:
                     state = "ERROR"
                     warning = [d["error"]]
                 elif BillStatusService.excluded(s, d["source_key"]):

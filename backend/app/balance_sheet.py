@@ -21,7 +21,7 @@ class BalanceSheetService:
         cutoff = day + " 23:59:59"
         with self.db.read() as session:
             graph = AccountGraph(session)
-            _, balances = graph.balances(session, cutoff)
+            raw, balances = graph.balances(session, cutoff)
             scope = (
                 AccountGroupService.descendants(session, group_id)
                 if group_id is not None
@@ -46,6 +46,25 @@ class BalanceSheetService:
                     for key in members
                 )
                 balance = balances.get(account.id, 0)
+                composite = graph.is_composite(account.id)
+                asset_amount = (
+                    sum(
+                        raw.get(i, 0)
+                        for i in members
+                        if graph.accounts[i].role == "ASSET"
+                    )
+                    if composite
+                    else balance if account.role == "ASSET" else 0
+                )
+                liability_amount = (
+                    -sum(
+                        raw.get(i, 0)
+                        for i in members
+                        if graph.accounts[i].role == "LIABILITY"
+                    )
+                    if composite
+                    else -balance if account.role == "LIABILITY" else 0
+                )
                 rows.append(
                     dict(
                         id=account.id,
@@ -58,12 +77,13 @@ class BalanceSheetService:
                         balance=balance,
                         amount=balance if account.role == "ASSET" else -balance,
                         merged_source_count=len(members) - 1,
+                        composite=composite,
+                        asset_amount=asset_amount,
+                        liability_amount=liability_amount,
                     )
                 )
-            assets = sum(row["amount"] for row in rows if row["role"] == "ASSET")
-            liabilities = sum(
-                row["amount"] for row in rows if row["role"] == "LIABILITY"
-            )
+            assets = sum(row["asset_amount"] for row in rows)
+            liabilities = sum(row["liability_amount"] for row in rows)
             return dict(
                 as_of=day,
                 group_id=int(group_id) if group_id is not None else None,

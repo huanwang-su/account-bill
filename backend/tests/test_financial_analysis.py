@@ -18,6 +18,14 @@ from app.main import LedgerApplication
 def ledger(tmp_path):
     db = Database(tmp_path / "db")
     db.initialize()
+    # These conservation tests explicitly compare the complete ledger.
+    from app.analysis_settings import AnalysisSettingsService
+
+    AnalysisSettingsService(db).save(
+        dict(
+            revision=0, exclude_investment_accounts=False, exclude_single_accounts=False
+        )
+    )
     categories = CatalogService(db).categories()
     category = lambda name: next(c["id"] for c in categories if c["name"] == name)
     groups = AccountGroupService(db)
@@ -127,6 +135,58 @@ def test_group_and_merge_analysis_never_duplicate_transactions(ledger):
     assert all(
         merged[key] == family[key] for key in ("income", "expense", "net", "count")
     )
+
+
+def test_exact_category_drilldown_matches_parent_direct_amount_and_split(ledger):
+    db, ids = ledger
+    categories = CatalogService(db).categories()
+    grocery = next(row["id"] for row in categories if row["name"] == "买菜")
+    tx = TransactionService(db)
+    direct = tx.post(
+        dict(
+            kind="EXPENSE",
+            account_id=5,
+            category_id=ids["food"],
+            amount="9",
+            occurred_at="2026-09-03",
+            idempotency_key="direct-parent-detail",
+        )
+    )["id"]
+    split = tx.post(
+        dict(
+            kind="EXPENSE",
+            account_id=5,
+            amount="20",
+            occurred_at="2026-09-03",
+            idempotency_key="direct-parent-split-detail",
+            items=[
+                dict(category_id=ids["food"], amount="7"),
+                dict(category_id=grocery, amount="13"),
+            ],
+        )
+    )["id"]
+    service = FinancialAnalysisService(db)
+    parent = service.analyze(dict(category_id=ids["food"]), level=2)
+    displayed = next(
+        row for row in parent["categories"]["expense"] if row["id"] == ids["food"]
+    )
+    assert displayed["amount"] == 1600
+    for exact in (True, "true", "1"):
+        detail = service.analyze(
+            dict(category_id=ids["food"], exact_category=exact), level=2
+        )
+        assert detail["expense"] == displayed["amount"]
+        assert {row["id"]: row["amount"] for row in detail["transactions"]} == {
+            direct: 900,
+            split: 700,
+        }
+    assert (
+        service.analyze(dict(category_id=ids["food"], exact_category="false"))[
+            "expense"
+        ]
+        == parent["expense"]
+    )
+    assert ReportService(db).integrity()["ok"]
 
 
 def test_refund_adjustments_are_signed_not_another_expense(ledger):

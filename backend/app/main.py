@@ -2,11 +2,12 @@ from pathlib import Path
 import os, json, csv, io, tempfile, sqlite3
 from urllib.parse import urlparse, quote
 from threading import RLock
-from fastapi import FastAPI, Request, UploadFile, File
+from fastapi import FastAPI, Request, UploadFile, File, Form
 from fastapi.responses import JSONResponse, FileResponse, Response
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.trustedhost import TrustedHostMiddleware
 from starlette.background import BackgroundTask
+from starlette.concurrency import run_in_threadpool
 from sqlalchemy.exc import IntegrityError
 from .database import Database, ProcessLease
 from .domain import DomainError, Clock
@@ -23,9 +24,18 @@ from .transfer_matching import TransferMatchService
 from .bill_associations import BillAssociationService
 from .balance_sheet import BalanceSheetService
 from .financial_analysis import FinancialAnalysisService
+from .fund_flows import FundFlowService
+from .fund_boundaries import FundBoundaryService
 from .securities import SecuritiesValuationService
 from .counterparty_analysis import CounterpartyAnalysisService
 from .investment_analysis import InvestmentAnalysisService
+from .expense_analysis import ExpenseAnalysisService
+from .overview import OverviewService
+from .overview_period import OverviewPeriod
+from .income_analysis import IncomeAnalysisService
+from .analysis_settings import AnalysisSettingsService
+from .single_account_analysis import SingleAccountAnalysisService
+from .data_backup import DataBackupService, BackupRecords
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -45,9 +55,16 @@ class LedgerApplication:
         self.reports = ReportService(self.db)
         self.balance_sheet = BalanceSheetService(self.db)
         self.financial_analysis = FinancialAnalysisService(self.db)
+        self.fund_flows = FundFlowService(self.db)
+        self.fund_boundaries = FundBoundaryService(self.db, self.fund_flows)
         self.securities = SecuritiesValuationService(self.db)
         self.counterparties = CounterpartyAnalysisService(self.db)
         self.investments = InvestmentAnalysisService(self.db)
+        self.expenses = ExpenseAnalysisService(self.db)
+        self.incomes = IncomeAnalysisService(self.db)
+        self.analysis_settings = AnalysisSettingsService(self.db)
+        self.single_accounts = SingleAccountAnalysisService(self.db)
+        self.overview = OverviewService(self.db)
         self.imports = ImportService(self.db)
         self.imports.link_existing_pouches()
         self.bills = BillService(self.db)
@@ -61,12 +78,40 @@ class LedgerApplication:
         self.posting.backfill()
         BillStatusService(self.db).apply_existing()
         self.lock = RLock()
+        self.data_backup = DataBackupService(self.db)
         self.app = FastAPI(title="有数 · 本地账本", version="0.18.0")
         self.app.add_middleware(
             TrustedHostMiddleware,
             allowed_hosts=["127.0.0.1", "localhost", "testserver"],
         )
         self._routes()
+
+    def period_filters(self, request):
+        values = dict(request.query_params)
+        if values.get("period") == "all" and request.url.path in (
+            "/api/bills",
+            "/api/bills/export",
+        ):
+            return {
+                key: value
+                for key, value in values.items()
+                if key not in ("period", "start", "end")
+            }
+        if values.get("period"):
+            if values["period"] not in (
+                "latest_month",
+                "1m",
+                "3m",
+                "6m",
+                "1y",
+                "custom",
+            ):
+                raise DomainError("请选择有效的统计时间范围")
+            # Explicit dates from a chart drilldown remain narrower than its preset.
+            if not (values.get("start") and values.get("end")):
+                period = OverviewPeriod(self.db, values).projection()
+                values.update(start=period["start"], end=period["end"])
+        return values
 
     def _routes(self):
         app = self.app
@@ -79,6 +124,30 @@ class LedgerApplication:
         def associate_bills(data: dict):
             return self.associations.link(
                 data.get("source_id"), data.get("target_id"), data.get("note")
+            )
+
+        @app.get("/api/analysis-settings")
+        def analysis_settings():
+            return self.analysis_settings.get()
+
+        @app.put("/api/analysis-settings")
+        def save_analysis_settings(data: dict):
+            return self.analysis_settings.save(data)
+
+        @app.get("/api/reports/period")
+        def report_period(request: Request):
+            return dict(
+                OverviewPeriod(self.db, dict(request.query_params)).projection(),
+                today=Clock.now()[:10],
+            )
+
+        @app.get("/api/reports/single-accounts")
+        def single_account_analysis(
+            request: Request, start: str = None, end: str = None, account_id: int = None
+        ):
+            filters = self.period_filters(request)
+            return self.single_accounts.analyze(
+                filters.get("start"), filters.get("end"), account_id
             )
 
         @app.get("/api/classification-policy")
@@ -210,16 +279,20 @@ class LedgerApplication:
 
         @app.get("/api/reports/counterparties")
         def counterparties(request: Request, account_id: int):
-            return self.counterparties.analyze(account_id, dict(request.query_params))
+            return self.counterparties.analyze(account_id, self.period_filters(request))
 
         @app.get("/api/reports/investments")
         def investments(
+            request: Request,
             account_id: int = None,
             start: str = None,
             end: str = None,
             grain: str = "month",
         ):
-            return self.investments.analyze(account_id, start, end, grain)
+            filters = self.period_filters(request)
+            return self.investments.analyze(
+                account_id, filters.get("start"), filters.get("end"), grain
+            )
 
         @app.get("/api/categories")
         def categories():
@@ -251,7 +324,7 @@ class LedgerApplication:
 
         @app.get("/api/transactions")
         def transactions(request: Request):
-            f = dict(request.query_params)
+            f = self.period_filters(request)
             return self.reports.list(f, audit=f.get("audit") == "true")
 
         @app.get("/api/reports/balance-sheet")
@@ -263,13 +336,83 @@ class LedgerApplication:
             request: Request,
             grain: str = "day",
             level: int = 1,
-            large_amount: str = "1000.00",
+            large_amount: str = None,
+            large_income_amount: str = None,
+            large_expense_amount: str = None,
             group_id: int = None,
             account_id: int = None,
             category_id: int = None,
         ):
             return self.financial_analysis.analyze(
-                dict(request.query_params), grain, level, large_amount
+                self.period_filters(request), grain, level, large_amount
+            )
+
+        @app.get("/api/reports/fund-flows")
+        def fund_flows(
+            request: Request,
+            start: str = None,
+            end: str = None,
+            group_id: int = None,
+            account_id: int = None,
+        ):
+            return self.fund_flows.analyze(self.period_filters(request))
+
+        @app.get("/api/reports/fund-boundaries")
+        def fund_boundaries(
+            request: Request,
+            start: str = None,
+            end: str = None,
+            group_id: int = None,
+            account_id: int = None,
+        ):
+            return self.fund_boundaries.analyze(self.period_filters(request))
+
+        @app.get("/api/reports/expenses")
+        def expense_analysis(
+            request: Request,
+            large_amount: str = None,
+            group_id: int = None,
+            account_id: int = None,
+            category_id: int = None,
+            excluded_account_ids: str = None,
+            exact_category: bool = False,
+            direct_group: bool = False,
+        ):
+            return self.expenses.analyze(self.period_filters(request), large_amount)
+
+        @app.get("/api/reports/income")
+        def income_analysis(
+            request: Request,
+            grain: str = "day",
+            level: int = 1,
+            large_amount: str = None,
+            group_id: int = None,
+            account_id: int = None,
+            category_id: int = None,
+            direct_group: bool = False,
+            excluded_account_ids: str = None,
+        ):
+            return self.incomes.analyze(
+                self.period_filters(request), grain, level, large_amount
+            )
+
+        @app.get("/api/reports/overview")
+        def overview(request: Request, as_of: str = None):
+            filters = self.period_filters(request)
+            filters.pop("as_of", None)
+            return self.overview.snapshot(as_of, filters)
+
+        @app.get("/api/reports/overview/details")
+        def overview_details(
+            request: Request,
+            section: str,
+            as_of: str = None,
+            day: str = None,
+            cumulative: bool = False,
+            group_id: int = None,
+        ):
+            return self.overview.details(
+                section, as_of, day, cumulative, group_id, self.period_filters(request)
             )
 
         @app.post("/api/transactions")
@@ -286,7 +429,7 @@ class LedgerApplication:
 
         @app.get("/api/reports/summary")
         def summary(request: Request):
-            return self.reports.summary(dict(request.query_params))
+            return self.reports.summary(self.period_filters(request))
 
         @app.get("/api/reports/saved")
         def saved():
@@ -305,11 +448,13 @@ class LedgerApplication:
             return self.imports.batches()
 
         @app.post("/api/imports")
-        async def upload(file: UploadFile = File(...)):
+        async def upload(file: UploadFile = File(...), start_at: str = None):
             content = await file.read(10 * 1024 * 1024 + 1)
             if len(content) > 10 * 1024 * 1024:
                 raise DomainError("文件不能超过 10 MB")
-            return self.workflow.stage(content, Path(file.filename or "账单.csv").name)
+            return self.workflow.stage(
+                content, Path(file.filename or "账单.csv").name, start_at=start_at
+            )
 
         @app.get("/api/import-runs/{key}/refund-candidates")
         def refund_candidates(key: int):
@@ -366,11 +511,11 @@ class LedgerApplication:
 
         @app.get("/api/bills")
         def bills(request: Request):
-            return self.bills.list(dict(request.query_params))
+            return self.bills.list(self.period_filters(request))
 
         @app.get("/api/bills/export")
         def export_bills(request: Request):
-            doc = self.bills.export(dict(request.query_params))
+            doc = self.bills.export(self.period_filters(request))
             return Response(
                 doc.model_dump_json(indent=2),
                 media_type="application/json",
@@ -447,9 +592,70 @@ class LedgerApplication:
                 background=BackgroundTask(lambda: os.unlink(path)),
             )
 
+        @app.get("/api/data-backup")
+        def download_business_backup():
+            return business_backup_response("")
+
+        def business_backup_response(password, recovery_filename=None):
+            content = self.data_backup.download(password, recovery_filename)
+            filename = (
+                "有数账本-"
+                + Clock.now().replace(":", "-").replace(" ", "_")
+                + ".ledger.zip"
+            )
+            if recovery_filename is not None:
+                filename = recovery_filename
+            return Response(
+                content,
+                media_type="application/zip",
+                headers={
+                    "Content-Disposition": "attachment; filename*=UTF-8''"
+                    + quote(filename)
+                },
+            )
+
+        @app.post("/api/data-backup")
+        def download_protected_backup(data: dict):
+            return business_backup_response(data.get("password", ""))
+
+        @app.post("/api/data-backup/validate")
+        async def validate_business_backup(
+            file: UploadFile = File(...), password: str = Form(default="")
+        ):
+            try:
+                content = await file.read(BackupRecords.MAX_UPLOAD + 1)
+                return await run_in_threadpool(
+                    self.data_backup.prepare,
+                    content,
+                    file.filename or "账本备份.ledger.zip",
+                    password,
+                )
+            finally:
+                await file.close()
+
+        @app.post("/api/data-backup/restore")
+        def restore_business_backup(data: dict):
+            return self.data_backup.restore(data.get("token"), data.get("confirmation"))
+
+        @app.delete("/api/data-backup/validation/{token}")
+        def discard_business_backup(token: str):
+            return self.data_backup.discard(token)
+
+        @app.get("/api/data-backup/recovery/{filename}")
+        def recovery_business_backup(filename: str):
+            return FileResponse(
+                self.data_backup.recovery(filename),
+                filename=filename,
+                media_type="application/zip",
+            )
+
+        @app.post("/api/data-backup/recovery/{filename}")
+        def download_protected_recovery(filename: str, data: dict):
+            return business_backup_response(data.get("password", ""), filename)
+
         @app.get("/api/export")
         def export(request: Request):
-            rows = self.reports.list(dict(request.query_params))
+            rows = self.reports.list(self.period_filters(request))
             output = io.StringIO()
             w = csv.writer(output)
             w.writerow(

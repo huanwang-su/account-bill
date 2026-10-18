@@ -214,6 +214,7 @@ def test_empty_and_invalid_selection(tmp_path):
     ] == [future]
     for kwargs in (
         dict(account_id=1),
+        dict(account_id=5),
         dict(account_id=99999),
         dict(start="bad"),
         dict(start="2026-10-01", end="2026-09-01"),
@@ -223,8 +224,14 @@ def test_empty_and_invalid_selection(tmp_path):
             service.analyze(**kwargs)
 
 
-def test_ordinary_account_only_investment_categories_and_split_portion(portfolio):
+@pytest.mark.parametrize("ordinary_kind", ["银行卡", "微信", "支付宝"])
+def test_ordinary_account_returns_are_excluded_even_with_investment_categories(
+    portfolio, ordinary_kind
+):
     db, a, b, _ = portfolio
+    accounts = AccountService(db)
+    account = next(r for r in accounts.list() if r["id"] == 5)
+    accounts.save({**account, "kind": ordinary_kind}, 5)
     catalog = CatalogService(db)
     categories = catalog.categories()
     income = next(c["id"] for c in categories if c["name"] == "理财收益")
@@ -234,6 +241,8 @@ def test_ordinary_account_only_investment_categories_and_split_portion(portfolio
         dict(name="存款利息", kind="INCOME", parent_id=income)
     )["id"]
     transactions = TransactionService(db)
+    service = InvestmentAnalysisService(db)
+    before = service.analyze(end="2026-09-30")
 
     def post(kind, amount, category, **extras):
         return transactions.post(
@@ -258,36 +267,12 @@ def test_ordinary_account_only_investment_categories_and_split_portion(portfolio
         loss,
         items=[dict(category_id=loss, amount="30"), dict(category_id=1, amount="70")],
     )
-    service = InvestmentAnalysisService(db)
     all_accounts = service.analyze(end="2026-09-30")
-    assert all_accounts["profit"] == 46900 and all_accounts["ending"] == 370500
-    assert (
-        all_accounts["asset_profit"] == 40500
-        and all_accounts["income_only_profit"] == 6400
-    )
-    assert (
-        all_accounts["asset_account_count"] == 2
-        and all_accounts["income_only_count"] == 1
-    )
-    only = service.analyze(5, end="2026-09-30")
-    assert only["profit"] == 6400 and only["ending"] == only["beginning"] == 0
-    assert len(only["profits"]) == 4 and only["asset_account_count"] == 0
-    assert only["missing_opening_ids"] == [] and only["reconciled"]
-    assert only["accounts"][0]["analysis_mode"] == "INCOME_ONLY"
-    assert (
-        only["trend"][-1]["cumulative_profit"] == 6400
-        and only["trend"][-1]["assets"] == 0
-    )
-    for row in list(only["profits"]):
-        # The linked refund must be revoked before its original expense.
-        if row["kind"] == "REFUND":
-            transactions.reverse(row["id"])
-    for row in list(only["profits"]):
-        if row["kind"] != "REFUND":
-            transactions.reverse(row["id"])
-    empty = service.analyze(5, end="2026-09-30")
-    assert empty["profit"] == empty["ending"] == 0
-    assert any(a["id"] == 5 for a in empty["available_accounts"])
+    assert all_accounts == before
+    assert all_accounts["profit"] == 40500 and all_accounts["ending"] == 370500
+    assert {r["id"] for r in all_accounts["available_accounts"]} == {a, b}
+    with pytest.raises(DomainError, match="证券或理财"):
+        service.analyze(5, end="2026-09-30")
 
 
 def test_wealth_account_type_is_included_without_classifying_bank_balance(tmp_path):

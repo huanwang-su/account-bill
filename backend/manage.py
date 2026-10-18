@@ -38,6 +38,8 @@ class BackupManager:
                 "011",
                 "012",
                 "013",
+                "014",
+                "015",
             ):
                 raise ValueError("不支持的备份版本")
             if c.execute(

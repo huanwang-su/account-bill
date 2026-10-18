@@ -15,7 +15,7 @@ from .models import (
     BillAssociation,
 )
 from .domain import DomainError, Money, Clock, TagValues, Journal, Posting
-from .account_config import AccountGraph, AccountGroupService
+from .account_config import AccountGraph, AccountGroupService, AccountNamingService
 from .models import AccountGroup
 
 
@@ -56,6 +56,7 @@ class AccountService:
                     id=a.id,
                     name=a.name,
                     number=a.number,
+                    note=a.note,
                     role=a.role,
                     kind=a.kind,
                     tags=json.loads(a.tags),
@@ -107,8 +108,12 @@ class AccountService:
                 and s.query(Entry).filter_by(account_id=account_id).first()
             ):
                 raise DomainError("已有流水的账户不能变更角色")
-            a.name = name
+            AccountNamingService.rename_in(s, a, name)
             a.number = str(data.get("number", ""))
+            note = data.get("note", a.note or "")
+            if not isinstance(note, str) or len(note) > 2000:
+                raise DomainError("账户备注须为 2000 字以内的文本")
+            a.note = note.strip()
             a.role = role
             a.kind = str(data.get("kind", "其他"))
             a.tags = Repository(s).tag_values(data.get("tags", []), "ACCOUNT")
@@ -400,10 +405,11 @@ class TransactionService:
         self.db = database
 
     def _account(self, s, key):
-        a = AccountGraph(s).canonical(key)
-        if not a.active or a.role == "SYSTEM":
+        graph = AccountGraph(s)
+        target = graph.canonical(key)
+        if not target.active or target.role == "SYSTEM":
             raise DomainError("请选择启用的普通账户")
-        return a
+        return graph.funding(key)
 
     def _postings(self, s, data):
         kind = data.get("kind")
@@ -680,7 +686,7 @@ class ReportService:
             descendants = set()
             if f.get("category_id"):
                 descendants = {category_graph.canonical(f["category_id"]).id}
-                while True:
+                while f.get("exact_category") not in (True, "true", "1"):
                     next_ids = descendants | {
                         c.id for c in cats.values() if c.parent_id in descendants
                     }

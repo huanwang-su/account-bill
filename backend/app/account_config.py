@@ -14,6 +14,8 @@ from .models import (
 
 
 class AccountGraph:
+    WEALTH_KINDS = {"证券", "理财"}
+
     def __init__(self, session):
         self.accounts = {a.id: a for a in session.query(Account)}
 
@@ -36,6 +38,26 @@ class AccountGraph:
             a.id for a in self.accounts.values() if self.canonical(a.id).id == target
         }
 
+    def is_composite(self, key):
+        target = self.canonical(key)
+        members = self.members(target.id)
+        return target.role == "ASSET" and (
+            any(self.accounts[i].role == "LIABILITY" for i in members)
+            or (
+                target.kind
+                not in self.WEALTH_KINDS | {"支付宝", "微信", "现金", "零钱通"}
+                and any(
+                    i != target.id and self.accounts[i].kind in self.WEALTH_KINDS
+                    for i in members
+                )
+            )
+        )
+
+    def funding(self, key):
+        """A net account retains the funding identity of its underlying components."""
+        target = self.canonical(key)
+        return self.accounts[int(key)] if self.is_composite(target.id) else target
+
     def balances(self, session, as_of=None):
         query = session.query(Entry.account_id, func.sum(Entry.amount))
         if as_of is not None:
@@ -50,6 +72,48 @@ class AccountGraph:
             canonical = self.canonical(key).id
             totals[canonical] = totals.get(canonical, 0) + amount
         return raw, totals
+
+
+class AccountNamingService:
+    """Display names can change while imported payment identities stay stable."""
+
+    @staticmethod
+    def rename_in(session, account, name):
+        name = str(name).strip()
+        if account.role == "SYSTEM":
+            raise DomainError("公共账户不能改名")
+        if not name or len(name) > 80:
+            raise DomainError("请填写 1–80 字的账户名称")
+        if (
+            session.query(Account)
+            .filter(Account.name == name, Account.id != (account.id or 0))
+            .first()
+        ):
+            raise DomainError("账户名称已存在")
+        for label in set(filter(None, [account.name, name])):
+            alias = (
+                session.query(AccountAlias)
+                .filter_by(provider="account-name", owner="", source_name=label)
+                .first()
+            )
+            if alias and alias.account_id != account.id:
+                raise DomainError("名称已被其他账户用作导入别名：" + label)
+        if account.id and account.name and account.name != name:
+            old = (
+                session.query(AccountAlias)
+                .filter_by(provider="account-name", owner="", source_name=account.name)
+                .first()
+            )
+            if not old:
+                session.add(
+                    AccountAlias(
+                        provider="account-name",
+                        owner="",
+                        source_name=account.name,
+                        account_id=account.id,
+                    )
+                )
+        account.name = name
 
 
 class AccountGroupService:
@@ -161,8 +225,13 @@ class AccountMergeService:
             raise DomainError("请选择有效账户")
         if source.id == target.id or source.merged_into_id or target.merged_into_id:
             raise DomainError("只能合并两个不同的未合并账户")
-        if source.role == "SYSTEM" or source.role != target.role:
-            raise DomainError("合并账户角色必须一致，公共账户不能合并")
+        if source.role == "SYSTEM" or (
+            source.role != target.role
+            and not (source.role == "LIABILITY" and target.role == "ASSET")
+        ):
+            raise DomainError(
+                "仅同角色账户可合并；信用卡等负债也可并入资产账户按净额汇总，公共账户不能合并"
+            )
         if not source.active or not target.active:
             raise DomainError("请先启用需要合并的账户")
         return graph, source, target

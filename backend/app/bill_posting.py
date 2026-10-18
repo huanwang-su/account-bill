@@ -276,7 +276,7 @@ class BillPostingService:
                     link,
                     {
                         "kind": kind,
-                        "account_id": account.id,
+                        "account_id": decision.get("account_id") or account.id,
                         "category_id": category,
                         "tags": labels["tags"],
                     },

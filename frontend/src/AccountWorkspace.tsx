@@ -90,6 +90,9 @@ export class AccountWorkspace extends React.Component<
     )
       this.setState({ scope: "all", query: "" });
   }
+  selectScope(scope: Scope) {
+    this.setState({ scope, query: "" });
+  }
   icon(account: Row) {
     if (account.kind.includes("银行") || account.kind.includes("信用卡"))
       return <BankOutlined />;
@@ -98,9 +101,6 @@ export class AccountWorkspace extends React.Component<
     return <WalletOutlined />;
   }
   accountRow(a: Row) {
-    const merged = this.props.accounts
-      .filter((source) => (a.merged_source_ids || []).includes(source.id))
-      .map((source) => source.name);
     const tone = a.kind.includes("微信")
       ? "wechat"
       : a.kind.includes("支付宝")
@@ -123,32 +123,34 @@ export class AccountWorkspace extends React.Component<
               <span title={a.name}>{a.name}</span>
               {!a.active && <Tag>停用</Tag>}
             </div>
-            <p>
-              {a.number ? `尾号 ${a.number.slice(-4)}` : a.kind}
-              {merged.length > 0 && (
-                <Tooltip title={"合并来源：" + merged.join("、")}>
-                  <span className="account-merged-note">
-                    {" "}
-                    · 含 {merged.join("、")}
-                  </span>
-                </Tooltip>
+            <div className="account-list-metadata">
+              <span>{a.kind}</span>
+              {a.number && <span>尾号 {a.number.slice(-4)}</span>}
+              <span>
+                {
+                  (
+                    {
+                      ASSET: "资金账户",
+                      LIABILITY: "负债账户",
+                      EXTERNAL: "外部往来",
+                    } as Row
+                  )[a.role]
+                }
+              </span>
+              {a.tags.length > 0 && (
+                <span className="account-list-tags" title={a.tags.join("、")}>
+                  {a.tags.map((tag: string) => (
+                    <span key={tag}>{tag}</span>
+                  ))}
+                </span>
               )}
-            </p>
+            </div>
+            {a.note && (
+              <p className="account-list-note" title={a.note}>
+                {a.note}
+              </p>
+            )}
           </div>
-        </div>
-        <div className="account-list-type">
-          {
-            (
-              {
-                ASSET: "资金账户",
-                LIABILITY: "负债账户",
-                EXTERNAL: "外部往来",
-              } as Row
-            )[a.role]
-          }
-          {a.tags.length > 0 && (
-            <small title={a.tags.join("、")}>{a.tags.join(" · ")}</small>
-          )}
         </div>
         <div className="account-list-amount">{Money.format(a.balance)}</div>
         <div className="account-list-opening">
@@ -158,7 +160,15 @@ export class AccountWorkspace extends React.Component<
             </span>
           ) : (
             <Tooltip title="当前金额为已记录的累计变动；设置期初后可核对完整余额。">
-              <span className="opening-pending">未设置</span>
+              <Button
+                type="link"
+                size="small"
+                className="account-opening-action"
+                aria-label={`设置期初：${a.name}`}
+                onClick={() => this.props.onEdit("opening", a)}
+              >
+                设置期初
+              </Button>
             </Tooltip>
           )}
         </div>
@@ -287,7 +297,10 @@ export class AccountWorkspace extends React.Component<
     const visible = selected.filter(
       (a) =>
         !needle ||
-        [a.name, a.number, a.kind].join(" ").toLowerCase().includes(needle),
+        [a.name, a.number, a.kind, a.note]
+          .join(" ")
+          .toLowerCase()
+          .includes(needle),
     );
     const visibleIds = new Set(visible.map((a) => a.id));
     const sections: React.ReactNode[] = [];
@@ -322,70 +335,69 @@ export class AccountWorkspace extends React.Component<
       ),
       children: directory.children(g.id).map(treeNode),
     });
-    const treeData = [
-      {
-        key: "all",
-        title: (
-          <span data-group-node="all">
-            <span>全部账户</span>
-            <small>{directory.accounts.length}</small>
-          </span>
-        ),
-        children: [
-          ...directory.children(null).map(treeNode),
-          {
-            key: "ungrouped",
-            title: (
-              <span data-group-node="ungrouped">
-                <span>未分组</span>
-                <small>{directory.direct(null).length}</small>
-              </span>
-            ),
-          },
-        ],
-      },
-    ];
+    const treeData = directory.children(null).map(treeNode);
     return (
       <div className="account-directory account-desktop">
-        <div className="account-page-toolbar">
-          <span>资金账户与归属</span>
-          <Space>
-            <Button onClick={this.props.onConfigure}>管理账户组</Button>
-            <Button
-              type="primary"
-              icon={<PlusOutlined />}
-              onClick={() =>
-                this.props.onAdd(typeof scope === "number" ? scope : undefined)
-              }
-            >
-              添加账户
-            </Button>
-          </Space>
-        </div>
         <div className="account-directory-layout">
           <div className="account-group-navigation">
-            <div className="account-navigation-title">
-              <FolderOutlined /> 账户组
+            <div className="account-navigation-header">
+              <div className="account-navigation-title">
+                <FolderOutlined /> 账户组
+              </div>
+              <Button
+                type="text"
+                size="small"
+                aria-label="管理账户组"
+                onClick={this.props.onConfigure}
+              >
+                管理
+              </Button>
             </div>
-            <Tree
-              blockNode
-              defaultExpandAll
-              selectedKeys={[String(scope)]}
-              treeData={treeData}
-              onSelect={(keys) => {
-                const key = String(keys[0] ?? "all");
-                this.setState({
-                  scope:
-                    key === "all" || key === "ungrouped" ? key : Number(key),
-                  query: "",
-                });
-              }}
-            />
-            <div className="group-tree-hint">
-              父组包含所有子组
-              <br />
-              合并账户只计一次
+            <div className="account-scope-selector">
+              <button
+                type="button"
+                className="account-group-shortcut"
+                aria-pressed={scope === "all"}
+                onClick={() => this.selectScope("all")}
+              >
+                <span
+                  className="account-group-shortcut-label"
+                  data-group-node="all"
+                >
+                  全部账户
+                </span>
+                <span className="account-group-count">
+                  {directory.accounts.length}
+                </span>
+              </button>
+              <Tree
+                blockNode
+                defaultExpandAll
+                selectedKeys={typeof scope === "number" ? [String(scope)] : []}
+                treeData={treeData}
+                onSelect={(keys) => {
+                  const key = keys[0];
+                  this.selectScope(key === undefined ? "all" : Number(key));
+                }}
+              />
+              <button
+                type="button"
+                className="account-group-shortcut"
+                aria-pressed={scope === "ungrouped"}
+                onClick={() => this.selectScope("ungrouped")}
+              >
+                <span
+                  className="account-group-shortcut-label"
+                  data-group-node="ungrouped"
+                >
+                  未分组
+                </span>
+                <span className="account-group-count">
+                  {directory.direct(null).length}
+                </span>
+              </button>
             </div>
+            <div className="group-tree-hint">包含子组，合并账户不重复计数</div>
           </div>
           <div className="account-directory-content">
             <div
@@ -417,6 +429,19 @@ export class AccountWorkspace extends React.Component<
                   自有资产与负债合计
                 </span>
               </div>
+              <div className="account-scope-actions">
+                <Button
+                  type="primary"
+                  icon={<PlusOutlined />}
+                  onClick={() =>
+                    this.props.onAdd(
+                      typeof scope === "number" ? scope : undefined,
+                    )
+                  }
+                >
+                  添加账户
+                </Button>
+              </div>
             </div>
             {uninitialized > 0 && (
               <div className="account-opening-notice">
@@ -445,7 +470,6 @@ export class AccountWorkspace extends React.Component<
               </div>
               <div className="account-list-columns">
                 <span>账户</span>
-                <span>类型 / 标签</span>
                 <span>账面金额（元）</span>
                 <span>期初余额</span>
                 <span>操作</span>

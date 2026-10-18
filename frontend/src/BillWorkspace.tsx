@@ -1,16 +1,15 @@
+import { ReportPeriodFilter } from "./ReportPeriodFilter";
 import React from "react";
 import {
   Alert,
   Button,
   Card,
-  DatePicker,
   Descriptions,
   Empty,
   Form,
   Input,
   Modal,
   Popconfirm,
-  InputNumber,
   Select,
   Space,
   Table,
@@ -21,12 +20,13 @@ import {
 import { PagedTable } from "./PagedTable";
 import { BillAssociationDialog } from "./BillAssociationDialog";
 import { BillSorter, BillSortOrder } from "./BillSorter";
+import { BillReviewForm } from "./BillReviewForm";
+import { BillAttention } from "./BillReviewModel";
 import { DownloadOutlined } from "@ant-design/icons";
 import {
   LedgerApi,
   MoneyFormatter as Money,
   Row,
-  CategoryTree,
   AccountGroupTree,
   BillCategoryTree,
   TagTree,
@@ -77,9 +77,10 @@ interface State {
 /** Reusable provider-independent bill viewer and offline classification workflow. */
 export class BillWorkspace extends React.Component<Props, State> {
   api = new LedgerApi();
+  reviewVersion = 0;
   state: State = {
     rows: [],
-    filters: this.props.initialFilters ?? {},
+    filters: this.props.initialFilters ?? ReportPeriodFilter.defaults(),
     busy: false,
     loading: true,
     history: [],
@@ -93,9 +94,14 @@ export class BillWorkspace extends React.Component<Props, State> {
   componentDidMount() {
     this.load();
   }
+  componentWillUnmount() {
+    this.reviewVersion++;
+  }
   componentDidUpdate(previous: Props) {
     if (previous.initialFilters !== this.props.initialFilters)
-      this.setState({ filters: this.props.initialFilters ?? {} });
+      this.setState({
+        filters: this.props.initialFilters ?? ReportPeriodFilter.defaults(),
+      });
     if (
       previous.refreshKey !== this.props.refreshKey ||
       previous.mode !== this.props.mode
@@ -133,22 +139,31 @@ export class BillWorkspace extends React.Component<Props, State> {
     }
   }
   async review(row: Row) {
+    if (this.state.busy || row.ledger_status !== "PENDING") return;
+    const version = ++this.reviewVersion;
     try {
       const [accounts, categories, policy] = await Promise.all([
         this.api.request("/accounts"),
         this.api.request("/categories"),
         this.api.request("/classification-policy"),
       ]);
+      if (version !== this.reviewVersion) return;
       this.setState({
         reviewing: { ...row, refund_income: policy.unmatched_refund_income },
         accounts,
         categories,
       });
     } catch (e) {
-      this.fail(e);
+      if (version === this.reviewVersion) this.fail(e);
     }
   }
+  closeReview() {
+    if (this.state.busy) return;
+    this.reviewVersion++;
+    this.setState({ reviewing: undefined });
+  }
   async resolve(values: Row) {
+    if (this.state.busy || !this.state.reviewing) return;
     this.setState({ busy: true });
     try {
       await this.api.request("/bills/resolve", "POST", {
@@ -258,6 +273,9 @@ export class BillWorkspace extends React.Component<Props, State> {
         (!f.end || r.facts.occurred_at.slice(0, 10) <= f.end),
     );
   }
+  showPending() {
+    this.setState({ filters: BillAttention.filters() });
+  }
   setFilter(patch: Row) {
     this.setState({ filters: { ...this.state.filters, ...patch } });
   }
@@ -270,6 +288,14 @@ export class BillWorkspace extends React.Component<Props, State> {
       sortDirections: ["ascend", "descend", "ascend"] as BillSortOrder[],
     });
     const classified = rows.filter((r) => r.classification).length;
+    const pending = BillAttention.rows(rows);
+    const nextPending = BillAttention.rows(
+      BillSorter.sort(
+        this.filtered,
+        this.state.sortField,
+        this.state.sortOrder,
+      ),
+    )[0];
     const tags = [
       ...new Set([
         ...this.state.tags.map((tag) => tag.name),
@@ -309,10 +335,41 @@ export class BillWorkspace extends React.Component<Props, State> {
         </div>
         <Alert
           className="mb"
-          type="info"
+          type={pending.length ? "warning" : "info"}
           showIcon
+          action={
+            pending.length > 0 && (
+              <Button size="small" onClick={() => this.showPending()}>
+                处理待核对（{pending.length}）
+              </Button>
+            )
+          }
           message={`已入账 ${rows.filter((r) => r.ledger_status === "POSTED").length} 条 · 待核对 ${rows.filter((r) => r.ledger_status === "PENDING").length} 条 · 已撤销 ${rows.filter((r) => r.ledger_status === "REVERSED").length} 条。分类状态表示分类是否完成，入账状态表示资金是否已记账。待核对记录可点击“核对入账”确认。`}
         />
+        {filters.ledger_status === "PENDING" && (
+          <div className="bill-attention-toolbar" role="status">
+            <div>
+              <strong>待处理异常 · {this.filtered.length} 条</strong>
+              <span>逐笔核对账户、类型和金额后入账；记录保留原始账单。</span>
+            </div>
+            <Space>
+              <Button
+                onClick={() =>
+                  this.setState({ filters: ReportPeriodFilter.defaults() })
+                }
+              >
+                返回交易列表
+              </Button>
+              <Button
+                type="primary"
+                disabled={!nextPending || this.state.busy || this.state.loading}
+                onClick={() => this.review(nextPending)}
+              >
+                核对下一条
+              </Button>
+            </Space>
+          </div>
+        )}
         <div className="filters">
           <Select
             allowClear
@@ -327,6 +384,8 @@ export class BillWorkspace extends React.Component<Props, State> {
             allowClear
             placeholder="搜索对方、描述、流水号"
             style={{ width: 230 }}
+            value={filters.q || ""}
+            onChange={(event) => this.setFilter({ q: event.target.value })}
             onSearch={(q) => this.setFilter({ q })}
           />
           <TreeSelect
@@ -389,13 +448,12 @@ export class BillWorkspace extends React.Component<Props, State> {
             }))}
             onChange={(ledger_status) => this.setFilter({ ledger_status })}
           />
-          <DatePicker.RangePicker
-            onChange={(d) =>
-              this.setFilter({
-                start: d?.[0]?.format("YYYY-MM-DD"),
-                end: d?.[1]?.format("YYYY-MM-DD"),
-              })
-            }
+          <ReportPeriodFilter
+            allowAll
+            refreshKey={this.props.refreshKey}
+            filters={filters}
+            label="账单日期"
+            onChange={(patch) => this.setFilter(patch)}
           />
         </div>
         <Card
@@ -644,138 +702,23 @@ export class BillWorkspace extends React.Component<Props, State> {
         <Modal
           open={!!this.state.reviewing}
           title="核对并入账"
+          width={680}
           footer={null}
+          closable={!this.state.busy}
+          maskClosable={!this.state.busy}
+          keyboard={!this.state.busy}
           destroyOnHidden
-          onCancel={() => this.setState({ reviewing: undefined })}
+          onCancel={() => this.closeReview()}
         >
           {this.state.reviewing && (
-            <Form
-              layout="vertical"
-              onFinish={(v) => this.resolve(v)}
-              initialValues={{
-                kind:
-                  this.state.reviewing.facts.settlement === "REFUNDED"
-                    ? this.state.reviewing.refund_income
-                      ? "INCOME"
-                      : "REFUND"
-                    : this.state.reviewing.classification?.category_path[0] ===
-                        "收入"
-                      ? "INCOME"
-                      : "EXPENSE",
-                account_id: this.state.reviewing.account_id,
-                amount: Money.input(
-                  this.state.reviewing.effective_amount_minor ??
-                    this.state.reviewing.facts.amount_minor,
-                ),
-              }}
-            >
-              <Alert
-                className="mb"
-                type="warning"
-                message={this.state.reviewing.ledger_reason}
-              />
-              <Form.Item
-                name="kind"
-                label="交易类型"
-                rules={[{ required: true }]}
-              >
-                <Select
-                  options={[
-                    { value: "EXPENSE", label: "支出" },
-                    { value: "INCOME", label: "收入" },
-                    { value: "TRANSFER", label: "内部转账" },
-                    { value: "REFUND", label: "退款" },
-                  ]}
-                />
-              </Form.Item>
-              <Form.Item
-                name="account_id"
-                label="收付款账户（转账为转出账户）"
-                rules={[{ required: true }]}
-              >
-                <Select
-                  options={this.state.accounts
-                    .filter((a) => a.active && a.role !== "SYSTEM")
-                    .map((a) => ({ value: a.id, label: a.name }))}
-                />
-              </Form.Item>
-              <Form.Item noStyle shouldUpdate>
-                {({ getFieldValue }) =>
-                  getFieldValue("kind") === "TRANSFER" ? (
-                    <Form.Item
-                      name="to_account_id"
-                      label="转入账户"
-                      rules={[{ required: true }]}
-                    >
-                      <Select
-                        options={this.state.accounts
-                          .filter((a) => a.active && a.role !== "SYSTEM")
-                          .map((a) => ({ value: a.id, label: a.name }))}
-                      />
-                    </Form.Item>
-                  ) : getFieldValue("kind") === "REFUND" ? (
-                    <Alert
-                      className="mb"
-                      type="info"
-                      message="退款统一使用“退款”分类"
-                    />
-                  ) : (
-                    <Form.Item name="category_id" label="入账分类">
-                      <Select
-                        allowClear
-                        placeholder="留空沿用明细分类"
-                        options={this.state.categories
-                          .filter(
-                            (c) =>
-                              c.active &&
-                              c.kind ===
-                                (getFieldValue("kind") === "INCOME"
-                                  ? "INCOME"
-                                  : "EXPENSE"),
-                          )
-                          .map((c) => ({
-                            value: c.id,
-                            label: new CategoryTree(this.state.categories).path(
-                              c.id,
-                            ),
-                          }))}
-                      />
-                    </Form.Item>
-                  )
-                }
-              </Form.Item>
-              <Form.Item
-                name="amount"
-                label="实际资金变动金额（元）"
-                rules={[{ required: true }]}
-              >
-                <InputNumber
-                  stringMode
-                  precision={2}
-                  style={{ width: "100%" }}
-                />
-              </Form.Item>
-              <Form.Item noStyle shouldUpdate>
-                {({ getFieldValue }) =>
-                  getFieldValue("kind") === "REFUND" && (
-                    <Form.Item name="related_id" label="原支出流水编号（可选）">
-                      <InputNumber
-                        precision={0}
-                        min={1}
-                        style={{ width: "100%" }}
-                      />
-                    </Form.Item>
-                  )
-                }
-              </Form.Item>
-              <Button
-                type="primary"
-                htmlType="submit"
-                loading={this.state.busy}
-              >
-                确认并入账
-              </Button>
-            </Form>
+            <BillReviewForm
+              key={this.state.reviewing.id}
+              bill={this.state.reviewing}
+              accounts={this.state.accounts}
+              categories={this.state.categories}
+              busy={this.state.busy}
+              onSubmit={(values) => this.resolve(values)}
+            />
           )}
         </Modal>
         {this.state.associating && (

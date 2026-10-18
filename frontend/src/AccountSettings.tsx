@@ -66,7 +66,7 @@ export class AccountSettings extends React.Component<Props, State> {
       <div className="account-settings">
         <Card title="账户合并" className="mb">
           <p>
-            把两个同角色账户合并到一个目标账户。余额和历史流水统一汇总，后续导入自动沿用目标账户。
+            余额和历史流水统一到目标账户。信用卡等负债可并入资产账户，欠款抵减账户余额；资产负债表保留资产与负债明细，理财分析保留基金部分。
           </p>
           <Space wrap>
             <Select

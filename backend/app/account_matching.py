@@ -17,7 +17,7 @@ class AlipayAccountResolver:
 
     def resolve(self, session, owner, method):
         account = self.resolve_source(session, owner, method)
-        return AccountGraph(session).canonical(account.id) if account else None
+        return AccountGraph(session).funding(account.id) if account else None
 
     def resolve_source(self, session, owner, method):
         parts = [part.strip() for part in method.split("&")]
@@ -85,7 +85,7 @@ class StatementAccountResolver:
 
     def resolve(self, session, provider, statement, row):
         account = self.resolve_source(session, provider, statement, row)
-        return AccountGraph(session).canonical(account.id) if account else None
+        return AccountGraph(session).funding(account.id) if account else None
 
     def resolve_source(self, session, provider, statement, row):
         if provider == "alipay":
@@ -95,11 +95,10 @@ class StatementAccountResolver:
         if provider == "wechat":
             hint = row.get("funding_hint", row["method"])
             if hint == "微信":
-                return (
-                    session.query(Account)
-                    .filter_by(name="微信", active=True, role="ASSET")
-                    .first()
+                account = AlipayAccountResolver().resolve_source(
+                    session, statement.owner, "微信"
                 )
+                return account if account and account.role == "ASSET" else None
             bank = re.search(r"(招商银行|中国银行).*?[（(](\d{4})[）)]", hint)
             if bank:
                 candidates = (

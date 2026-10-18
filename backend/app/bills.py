@@ -123,6 +123,7 @@ class AlipayBillAdapter(BillAdapter):
             "交易成功": "COMPLETED",
             "支付成功": "COMPLETED",
             "代付成功": "COMPLETED",
+            "转账成功": "COMPLETED",
             "等待确认收货": "AWAITING_RECEIPT",
             "退款成功": "REFUNDED",
             "交易关闭": "CLOSED",

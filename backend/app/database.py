@@ -1,6 +1,7 @@
 from contextlib import contextmanager
 from pathlib import Path
 import sqlite3
+from threading import RLock
 from sqlalchemy import create_engine, event, text
 from sqlalchemy.orm import sessionmaker
 from .models import Base, Account, Category
@@ -8,6 +9,7 @@ from .models import Base, Account, Category
 
 class Database:
     def __init__(self, path):
+        self.gate = RLock()
         self.path = Path(path).resolve()
         self.path.parent.mkdir(parents=True, exist_ok=True)
         self.engine = create_engine(
@@ -43,7 +45,7 @@ class Database:
                     if has_version
                     else None
                 )
-            if current and current[0] != "013":
+            if current and current[0] != "015":
                 self.backup(str(self.path) + ".before-upgrade-" + current[0])
         command.upgrade(config, "head")
         with self.write() as s:
@@ -90,12 +92,12 @@ class Database:
 
     @contextmanager
     def read(self):
-        with self.sessions() as s:
+        with self.gate, self.sessions() as s:
             yield s
 
     @contextmanager
     def write(self):
-        with self.sessions() as s:
+        with self.gate, self.sessions() as s:
             try:
                 s.execute(text("BEGIN IMMEDIATE"))
                 yield s
@@ -105,7 +107,9 @@ class Database:
                 raise
 
     def backup(self, target):
-        with sqlite3.connect(self.path) as source, sqlite3.connect(target) as dest:
+        with self.gate, sqlite3.connect(self.path) as source, sqlite3.connect(
+            target
+        ) as dest:
             source.backup(dest)
             dest.execute("PRAGMA journal_mode=DELETE")
 

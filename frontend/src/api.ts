@@ -1,6 +1,6 @@
 export type Row = Record<string, any>;
 export class LedgerApi {
-  async request(path: string, method = "GET", body?: unknown): Promise<any> {
+  private async response(path: string, method = "GET", body?: unknown) {
     const response = await fetch("/api" + path, {
       method,
       headers:
@@ -25,7 +25,20 @@ export class LedgerApi {
         typeof error.detail === "string" ? error.detail : "请检查输入内容",
       );
     }
-    return response.json();
+    return response;
+  }
+  async request(path: string, method = "GET", body?: unknown): Promise<any> {
+    return (await this.response(path, method, body)).json();
+  }
+  async download(path: string, body: unknown) {
+    const response = await this.response(path, "POST", body);
+    const encoded = response.headers
+      .get("Content-Disposition")
+      ?.match(/filename\*=UTF-8''([^;]+)/i)?.[1];
+    return {
+      blob: await response.blob(),
+      filename: encoded ? decodeURIComponent(encoded) : "账本备份.ledger.zip",
+    };
   }
   query(filters: Row) {
     return new URLSearchParams(

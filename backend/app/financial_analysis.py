@@ -2,9 +2,12 @@
 
 from collections import defaultdict
 from datetime import date, timedelta
-from .domain import DomainError, Money
+from .domain import DomainError
 from .category_catalog import CategoryGraph
 from .services import ReportService
+from .account_movements import AccountMovementService
+from .report_scope import ReportAccountScope
+from .analysis_settings import AnalysisDefaults
 
 
 class FinancialAnalysisService:
@@ -32,22 +35,53 @@ class FinancialAnalysisService:
             )
         return values
 
-    def analyze(self, filters=None, grain="day", level=1, large_amount="1000.00"):
+    def analyze(
+        self,
+        filters=None,
+        grain="day",
+        level=1,
+        large_amount=None,
+        account_scope=None,
+        large_income_amount=None,
+        large_expense_amount=None,
+    ):
         if grain not in ("day", "month") or level not in (1, 2):
             raise DomainError("分析粒度需为日/月，分类层级需为一级/二级")
-        threshold = Money.parse(large_amount)
-        if threshold < 0:
-            raise DomainError("大额门槛不能为负数")
         filters = filters or {}
+        defaults = AnalysisDefaults(self.db)
+        income_threshold = defaults.threshold(
+            "income",
+            (
+                large_income_amount
+                if large_income_amount is not None
+                else filters.get("large_income_amount", large_amount)
+            ),
+        )
+        expense_threshold = defaults.threshold(
+            "expense",
+            (
+                large_expense_amount
+                if large_expense_amount is not None
+                else filters.get("large_expense_amount", large_amount)
+            ),
+        )
+        include_movements = account_scope is None
+        exclusion = None
+        if account_scope is None:
+            with self.db.read() as session:
+                exclusion = ReportAccountScope(session, filters)
+            account_scope = exclusion
         rows = [
             r
             for r in ReportService(self.db).list(filters)
             if r["kind"] in ("INCOME", "EXPENSE", "REFUND")
+            and (account_scope is None or account_scope.allows(r))
         ]
         trend = defaultdict(lambda: dict(income=0, expense=0))
         buckets = {}
         income = expense = income_count = expense_count = refund_count = 0
         large = []
+        detailed = []
         with self.db.read() as session:
             graph = CategoryGraph(session)
             for row in rows:
@@ -97,21 +131,23 @@ class FinancialAnalysisService:
                     bucket["amount"] += value
                     bucket["transaction_ids"].add(row["id"])
                     category_names.append("未分类")
-                if row["amount"] >= threshold:
-                    large.append(
-                        dict(
-                            **row,
-                            category_names=list(dict.fromkeys(category_names)),
-                            account_names=list(
-                                dict.fromkeys(
-                                    e["account"]
-                                    for e in row["entries"]
-                                    if e["role"] in ("ASSET", "LIABILITY")
-                                )
-                            ),
-                            direction="INCOME" if is_income else "EXPENSE",
+                detail = dict(
+                    **row,
+                    category_names=list(dict.fromkeys(category_names)),
+                    account_names=list(
+                        dict.fromkeys(
+                            e["account"]
+                            for e in row["entries"]
+                            if e["role"] in ("ASSET", "LIABILITY")
                         )
-                    )
+                    ),
+                    direction="INCOME" if is_income else "EXPENSE",
+                )
+                detailed.append(detail)
+                if row["amount"] >= (
+                    income_threshold if is_income else expense_threshold
+                ):
+                    large.append(detail)
         labels = []
         if rows:
             labels = self.periods(
@@ -140,7 +176,7 @@ class FinancialAnalysisService:
                 categories, key=lambda c: (-c["amount"], c["id"])
             )
         large.sort(key=lambda r: (r["amount"], r["occurred_at"], r["id"]), reverse=True)
-        return dict(
+        result = dict(
             grain=grain,
             level=level,
             income=income,
@@ -156,7 +192,13 @@ class FinancialAnalysisService:
                 dict(period=p, **trend[p], net=trend[p]["income"] - trend[p]["expense"])
                 for p in labels
             ],
-            large_amount_minor=threshold,
+            large_amount_minor=(
+                income_threshold
+                if filters.get("kind") == "INCOME"
+                else expense_threshold
+            ),
+            large_income_amount_minor=income_threshold,
+            large_expense_amount_minor=expense_threshold,
             large_count=len(large),
             large_share=len(large) / len(rows) if rows else 0,
             large_income=sum(r["amount"] for r in large if r["kind"] == "INCOME"),
@@ -166,4 +208,24 @@ class FinancialAnalysisService:
                 if r["kind"] != "INCOME"
             ),
             large_transactions=large,
+            transactions=detailed,
         )
+        if include_movements:
+            result["account_movements"] = AccountMovementService(self.db).analyze(
+                dict(
+                    filters,
+                    **(
+                        {
+                            key: value
+                            for key, value in exclusion.projection().items()
+                            if key in ReportAccountScope.FIELDS
+                            and key != "excluded_account_ids"
+                        }
+                        if exclusion
+                        else {}
+                    ),
+                )
+            )
+        if exclusion is not None:
+            result["account_scope"] = exclusion.projection()
+        return result
