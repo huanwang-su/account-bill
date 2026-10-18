@@ -9,10 +9,12 @@ __pycache__/
 .env
 .env.*
 !.env.example
-# Local ledger, imports, exports and backups must never enter the source repository.
+# Keep local databases, raw imports, exports and temporary data out of Git.
 data/*
 !data/.gitkeep
-backups/
+# Allow generated password-protected ledger ZIPs; ignore other backup files.
+/backups/*
+!/backups/*.ledger.zip
 exports/
 uploads/
 logs/
