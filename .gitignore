@@ -12,9 +12,8 @@ __pycache__/
 # Keep local databases, raw imports, exports and temporary data out of Git.
 data/*
 !data/.gitkeep
-# Allow generated password-protected ledger ZIPs; ignore other backup files.
-/backups/*
-!/backups/*.ledger.zip
+# Backup archives are committed only on the wh branch.
+/backups/
 exports/
 uploads/
 logs/
