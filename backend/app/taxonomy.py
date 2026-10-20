@@ -1,6 +1,6 @@
 """Shared hierarchy traversal and provider-independent classification path matching."""
 
-from .models import Tag, Category
+from .models import Tag
 
 
 class Hierarchy:

@@ -1,5 +1,8 @@
+import { MetricCard } from "./MetricCard";
 import { ReportPeriodFilter } from "./ReportPeriodFilter";
+import { LatestRequest } from "./LatestRequest";
 import React from "react";
+import { AmountPrivacy } from "./AmountPrivacy";
 import {
   Alert,
   Button,
@@ -25,7 +28,7 @@ import { BillAttention } from "./BillReviewModel";
 import { DownloadOutlined } from "@ant-design/icons";
 import {
   LedgerApi,
-  MoneyFormatter as Money,
+  DisplayMoneyFormatter as Money,
   Row,
   AccountGroupTree,
   BillCategoryTree,
@@ -73,10 +76,15 @@ interface State {
   tags: Row[];
   sortField: string;
   sortOrder: BillSortOrder;
+  current: number;
+  pageSize: number;
+  total?: number;
+  statistics?: Row;
 }
 /** Reusable provider-independent bill viewer and offline classification workflow. */
 export class BillWorkspace extends React.Component<Props, State> {
   api = new LedgerApi();
+  loader = new LatestRequest(this.api);
   reviewVersion = 0;
   state: State = {
     rows: [],
@@ -90,35 +98,64 @@ export class BillWorkspace extends React.Component<Props, State> {
     tags: [],
     sortField: "occurred_at",
     sortOrder: "descend",
+    current: 1,
+    pageSize: 15,
   };
   componentDidMount() {
     this.load();
   }
   componentWillUnmount() {
+    this.loader.dispose();
     this.reviewVersion++;
   }
-  componentDidUpdate(previous: Props) {
+  componentDidUpdate(previous: Props, state: State) {
     if (previous.initialFilters !== this.props.initialFilters)
-      this.setState({
+      return this.setState({
         filters: this.props.initialFilters ?? ReportPeriodFilter.defaults(),
+        current: 1,
       });
     if (
       previous.refreshKey !== this.props.refreshKey ||
-      previous.mode !== this.props.mode
+      previous.mode !== this.props.mode ||
+      state.filters !== this.state.filters ||
+      state.current !== this.state.current ||
+      state.pageSize !== this.state.pageSize ||
+      state.sortField !== this.state.sortField ||
+      state.sortOrder !== this.state.sortOrder
     )
       this.load();
   }
   async load() {
+    const version = this.loader.begin();
+    this.setState({ loading: true });
     try {
-      const [rows, groups, categories, tags] = await Promise.all([
-        this.api.request("/bills"),
+      const [result, groups, categories, tags] = await Promise.all([
+        this.api.request(
+          "/bills?" +
+            this.api.query({
+              ...this.state.filters,
+              page: this.state.current,
+              page_size: this.state.pageSize,
+              sort: this.state.sortField,
+              order: this.state.sortOrder,
+            }),
+        ),
         this.api.request("/account-groups"),
         this.api.request("/categories"),
         this.api.request("/tags"),
       ]);
-      this.setState({ rows, groups, categories, tags, loading: false });
+      if (this.loader.current(version))
+        this.setState({
+          rows: Array.isArray(result) ? result : result.items,
+          total: Array.isArray(result) ? undefined : result.total,
+          statistics: result.statistics,
+          groups,
+          categories,
+          tags,
+          loading: false,
+        });
     } catch (e) {
-      this.fail(e);
+      if (this.loader.current(version)) this.fail(e);
     }
   }
   fail(e: unknown) {
@@ -227,6 +264,7 @@ export class BillWorkspace extends React.Component<Props, State> {
     }
   }
   get filtered() {
+    if (this.state.total !== undefined) return this.state.rows;
     const f = this.state.filters;
     return this.state.rows.filter(
       (r) =>
@@ -274,10 +312,10 @@ export class BillWorkspace extends React.Component<Props, State> {
     );
   }
   showPending() {
-    this.setState({ filters: BillAttention.filters() });
+    this.setState({ filters: BillAttention.filters(), current: 1 });
   }
   setFilter(patch: Row) {
-    this.setState({ filters: { ...this.state.filters, ...patch } });
+    this.setState({ filters: { ...this.state.filters, ...patch }, current: 1 });
   }
   render() {
     const { rows, filters, editing, detail } = this.state;
@@ -287,8 +325,12 @@ export class BillWorkspace extends React.Component<Props, State> {
       sortOrder: this.state.sortField === key ? this.state.sortOrder : null,
       sortDirections: ["ascend", "descend", "ascend"] as BillSortOrder[],
     });
-    const classified = rows.filter((r) => r.classification).length;
+    const stats = this.state.statistics;
+    const total = stats?.total ?? rows.length;
+    const classified =
+      stats?.classified ?? rows.filter((r) => r.classification).length;
     const pending = BillAttention.rows(rows);
+    const pendingCount = stats?.pending ?? pending.length;
     const nextPending = BillAttention.rows(
       BillSorter.sort(
         this.filtered,
@@ -305,51 +347,52 @@ export class BillWorkspace extends React.Component<Props, State> {
     return (
       <div className="bill-workspace">
         <div className="metrics">
-          <div className="metric featured">
+          <MetricCard className="metric featured">
             <span>统一账单</span>
             <strong>
-              {rows.length} <small>条</small>
+              {total} <small>条</small>
             </strong>
             <small>已持久保存 · 全部记录</small>
-          </div>
-          <div className="metric">
+          </MetricCard>
+          <MetricCard className="metric">
             <span>已完成分类处理</span>
             <strong>{classified}</strong>
             <small>包括保留复核说明的记录</small>
-          </div>
-          <div className="metric">
+          </MetricCard>
+          <MetricCard className="metric">
             <span>待分类</span>
-            <strong>{rows.length - classified}</strong>
+            <strong>{total - classified}</strong>
             <small>可导出交给 Codex 处理</small>
-          </div>
-          <div className="metric">
+          </MetricCard>
+          <MetricCard className="metric">
             <span>分类需复核</span>
             <strong>
-              {
+              {stats?.review ??
                 rows.filter((r) => r.classification_status === "NEEDS_REVIEW")
-                  .length
-              }
+                  .length}
             </strong>
             <small>信息不足时保留原始含义</small>
-          </div>
+          </MetricCard>
         </div>
         <Alert
           className="mb"
-          type={pending.length ? "warning" : "info"}
+          type={pendingCount ? "warning" : "info"}
           showIcon
           action={
-            pending.length > 0 && (
+            pendingCount > 0 && (
               <Button size="small" onClick={() => this.showPending()}>
-                处理待核对（{pending.length}）
+                处理待核对（{pendingCount}）
               </Button>
             )
           }
-          message={`已入账 ${rows.filter((r) => r.ledger_status === "POSTED").length} 条 · 待核对 ${rows.filter((r) => r.ledger_status === "PENDING").length} 条 · 已撤销 ${rows.filter((r) => r.ledger_status === "REVERSED").length} 条。分类状态表示分类是否完成，入账状态表示资金是否已记账。待核对记录可点击“核对入账”确认。`}
+          message={`已入账 ${stats?.posted ?? rows.filter((r) => r.ledger_status === "POSTED").length} 条 · 待核对 ${stats?.pending ?? rows.filter((r) => r.ledger_status === "PENDING").length} 条 · 已撤销 ${stats?.reversed ?? rows.filter((r) => r.ledger_status === "REVERSED").length} 条。分类状态表示分类是否完成，入账状态表示资金是否已记账。待核对记录可点击“核对入账”确认。`}
         />
         {filters.ledger_status === "PENDING" && (
           <div className="bill-attention-toolbar" role="status">
             <div>
-              <strong>待处理异常 · {this.filtered.length} 条</strong>
+              <strong>
+                待处理异常 · {this.state.total ?? this.filtered.length} 条
+              </strong>
               <span>逐笔核对账户、类型和金额后入账；记录保留原始账单。</span>
             </div>
             <Space>
@@ -457,7 +500,7 @@ export class BillWorkspace extends React.Component<Props, State> {
           />
         </div>
         <Card
-          title={`交易明细 · ${this.filtered.length} 条`}
+          title={`交易明细 · ${this.state.total ?? this.filtered.length} 条`}
           extra={
             <Space>
               <Button
@@ -476,7 +519,7 @@ export class BillWorkspace extends React.Component<Props, State> {
               value={this.state.sortField}
               style={{ width: 150 }}
               options={BillSorter.fields}
-              onChange={(sortField) => this.setState({ sortField })}
+              onChange={(sortField) => this.setState({ sortField, current: 1 })}
             />
             <Select
               aria-label="交易排序方向"
@@ -486,18 +529,33 @@ export class BillWorkspace extends React.Component<Props, State> {
                 { value: "descend", label: "降序" },
                 { value: "ascend", label: "升序" },
               ]}
-              onChange={(sortOrder) => this.setState({ sortOrder })}
+              onChange={(sortOrder) => this.setState({ sortOrder, current: 1 })}
             />
             <small className="muted">点击表头也可切换排序</small>
           </Space>
           <PagedTable
             rowKey="id"
+            remote={
+              this.state.total === undefined
+                ? undefined
+                : {
+                    current: this.state.current,
+                    pageSize: this.state.pageSize,
+                    total: this.state.total,
+                    onChange: (current, pageSize) =>
+                      this.setState({ current, pageSize }),
+                  }
+            }
             loading={this.state.loading}
-            dataSource={BillSorter.sort(
-              this.filtered,
-              this.state.sortField,
-              this.state.sortOrder,
-            )}
+            dataSource={
+              this.state.total !== undefined
+                ? this.filtered
+                : BillSorter.sort(
+                    this.filtered,
+                    this.state.sortField,
+                    this.state.sortOrder,
+                  )
+            }
             scroll={{ x: 1170 }}
             defaultPageSize={15}
             pageResetKey={JSON.stringify([
@@ -509,6 +567,7 @@ export class BillWorkspace extends React.Component<Props, State> {
               const selected = Array.isArray(sorter) ? sorter[0] : sorter;
               if (selected.columnKey && selected.order)
                 this.setState({
+                  current: 1,
                   sortField: String(selected.columnKey),
                   sortOrder: selected.order,
                 });
@@ -877,10 +936,10 @@ export class BillWorkspace extends React.Component<Props, State> {
                   style={{ whiteSpace: "pre-wrap", overflowWrap: "anywhere" }}
                 >
                   {JSON.stringify(
-                    {
+                    AmountPrivacy.fields({
                       original: detail.original_fields,
                       related: detail.related_sources,
-                    },
+                    }),
                     null,
                     2,
                   )}

@@ -1,0 +1,25 @@
+/* PC report rhythm: clear filters, quiet cards and consistent numeric alignment. */
+.ant-card {
+  box-shadow: var(--shadow);
+}
+.filters {
+  padding: 14px 16px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  align-items: center;
+}
+.metric,
+.ant-card {
+  transition:
+    background-color 0.18s ease,
+    border-color 0.18s ease;
+}
+.metric strong,
+.single-account-movements strong,
+.ant-table-cell {
+  font-variant-numeric: tabular-nums;
+}
+.ant-table-wrapper .ant-table-thead > tr > th {
+  font-weight: 500;
+}

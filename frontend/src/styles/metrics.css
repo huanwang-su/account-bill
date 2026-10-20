@@ -1,0 +1,373 @@
+/* Consistent financial meaning across report summary cards and local totals. */
+[data-tone="positive"] {
+  --statistic-color: var(--positive);
+}
+[data-tone="expense"] {
+  --statistic-color: var(--expense);
+}
+[data-tone="negative"] {
+  --statistic-color: var(--negative);
+}
+[data-tone="primary"] {
+  --statistic-color: var(--primary);
+}
+[data-tone="muted"] {
+  --statistic-color: var(--muted);
+}
+.metric[data-tone],
+.fund-flow-stat[data-tone],
+.account-movement-stat[data-tone],
+.overview-cashflow > .ant-card[data-tone] {
+  box-shadow: inset 0 3px 0
+    color-mix(in srgb, var(--statistic-color) 58%, var(--border));
+}
+.metric[data-tone] > strong,
+.fund-flow-stat[data-tone] > strong,
+.account-movement-stat[data-tone] > strong,
+.overview-cashflow > .ant-card[data-tone] > .ant-card-body > strong,
+.statistic-value[data-tone] {
+  color: var(--statistic-color);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+.metric[data-tone] > span,
+.fund-flow-stat[data-tone] > span,
+.account-movement-stat[data-tone] > span {
+  font-weight: 500;
+}
+.metric.featured[data-tone] {
+  color: var(--text);
+  border-color: color-mix(in srgb, var(--statistic-color) 22%, var(--border));
+  background: color-mix(in srgb, var(--statistic-color) 7%, var(--surface));
+}
+.metric.featured[data-tone] > span,
+.metric.featured[data-tone] small {
+  color: var(--muted);
+}
+.fund-flow-stat[data-tone="muted"] {
+  background: var(--surface-muted);
+  box-shadow: inset 0 3px 0 var(--border);
+}
+
+.report-account-filters {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 16px 26px;
+  padding: 16px 20px;
+  margin: 0 0 20px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface);
+}
+.report-account-filters > label {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.report-account-filter-select {
+  flex: 1;
+  min-width: 300px;
+}
+.report-account-filter-select .ant-select {
+  flex: 1;
+  min-width: 200px;
+}
+.account-exclusion-hint {
+  min-width: 240px;
+  max-width: 420px;
+  font-size: 13px;
+}
+.account-exclusion-hint p {
+  margin: 0 0 8px;
+}
+.account-exclusion-hint ul {
+  max-height: 300px;
+  overflow-y: auto;
+  padding: 0;
+  margin: 0;
+  list-style: none;
+}
+.account-exclusion-hint li {
+  padding: 7px 0;
+  line-height: 1.6;
+  border-top: 1px solid var(--border);
+}
+.navigation-pending-count {
+  min-width: 19px;
+  height: 19px;
+  padding: 0 5px;
+  border: 0;
+  border-radius: 10px;
+  background: var(--negative);
+  color: white;
+  font-size: 10px;
+  font-weight: 600;
+  line-height: 19px;
+  cursor: pointer;
+}
+.navigation-pending-count:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 3px;
+}
+.bill-attention-toolbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 20px;
+  padding: 16px 20px;
+  margin-bottom: 18px;
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--warning);
+  border-radius: 10px;
+  background: var(--surface);
+}
+.bill-attention-toolbar strong,
+.bill-attention-toolbar span {
+  display: block;
+}
+.bill-attention-toolbar strong {
+  font-size: 14px;
+}
+.bill-attention-toolbar span {
+  margin-top: 5px;
+  color: var(--muted);
+  font-size: 12px;
+}
+.bill-review-account-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 18px;
+}
+.bill-review-account-grid .ant-input[disabled] {
+  color: var(--muted);
+  background: var(--surface-muted);
+}
+.settings-grid > .data-backup-panel {
+  grid-column: 1 / -1;
+}
+.data-backup-actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin: 18px 0 14px;
+}
+.data-restore-preview {
+  margin-top: 22px;
+  padding-top: 20px;
+  border-top: 1px solid var(--border);
+}
+.data-restore-preview > .ant-checkbox-wrapper {
+  display: flex;
+  align-items: center;
+  font-weight: 500;
+}
+.fund-flow-perspectives {
+  margin-bottom: 20px;
+}
+.overview-period-controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: center;
+  margin-bottom: 16px;
+}
+.report-period-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+}
+.report-period-controls > span {
+  white-space: nowrap;
+  font-weight: 500;
+}
+.report-period-controls > .ant-picker-range {
+  width: 320px;
+}
+.fund-flow-filters > .report-period-controls {
+  grid-column: 1 / -1;
+}
+.fund-flow-filters .report-period-controls > .ant-select {
+  width: 200px;
+}
+.fund-flow-filters .report-period-controls > .ant-picker-range {
+  width: 320px;
+}
+.overview-analysis-filters > .report-period-controls {
+  margin-bottom: 16px;
+}
+.overview-account-transfers {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px 20px;
+  padding: 14px 16px;
+  margin-bottom: 16px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface-muted);
+}
+.overview-account-transfers > button {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+  border: 0;
+  padding: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+.overview-account-transfers span,
+.overview-account-transfers small {
+  color: var(--muted);
+  font-size: 12px;
+}
+.overview-account-transfers strong {
+  font-size: 18px;
+  font-variant-numeric: tabular-nums;
+}
+.overview-account-transfers small {
+  grid-column: 1 / -1;
+}
+.overview-period-controls .ant-select {
+  min-width: 160px;
+}
+.overview-scope-note {
+  color: var(--muted);
+  font-size: 12px;
+  margin: -6px 0 20px;
+  line-height: 1.8;
+}
+.overview-core-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 24px;
+  margin: 24px 0;
+}
+.overview-core-grid > .ant-card {
+  min-width: 0;
+}
+.overview-core-stats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 20px;
+  margin-bottom: 16px;
+}
+.overview-core-stats > div {
+  flex: 1;
+  min-width: 100px;
+}
+.overview-core-stats span {
+  display: block;
+  color: var(--muted);
+  font-size: 12px;
+  margin-bottom: 8px;
+}
+.overview-core-stats strong {
+  font-size: 22px;
+  font-variant-numeric: tabular-nums;
+}
+.overview-core-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 14px;
+}
+.overview-core-list > span {
+  background: var(--surface-muted);
+  border-radius: 8px;
+  padding: 8px 12px;
+  color: var(--muted);
+}
+.overview-position-grid,
+.overview-accounts-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 24px;
+}
+.overview-position-grid > .ant-card,
+.overview-accounts-grid > .ant-card {
+  min-width: 0;
+}
+.overview-accounts-grid > .ant-card:only-child {
+  grid-column: 1 / -1;
+}
+.balance-flow-canvas-compact {
+  min-width: 640px;
+}
+.overview-position-flow .ant-card-body {
+  padding: 20px 16px;
+}
+.overview-analysis-filters {
+  margin-top: 24px;
+  padding: 22px 24px 4px;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: var(--surface);
+}
+.overview-wealth-card {
+  grid-column: 1 / -1;
+}
+.overview-attention-section {
+  margin: 28px 0;
+}
+.overview-section-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  margin-bottom: 18px;
+}
+.overview-section-heading h3 {
+  margin: 0 0 8px;
+  font-size: 18px;
+}
+.overview-section-heading p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12px;
+}
+.overview-account-balance {
+  padding-bottom: 18px;
+  border-bottom: 1px solid var(--border);
+}
+.overview-account-cash {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 16px;
+  margin-bottom: 18px;
+}
+.overview-account-cash > * {
+  padding: 10px 0;
+  border: 0;
+  background: transparent;
+  text-align: left;
+  color: inherit;
+  font: inherit;
+}
+.overview-account-cash button {
+  cursor: pointer;
+  border-radius: 8px;
+  transition: background 160ms ease;
+}
+.overview-account-cash button:hover,
+.overview-account-cash button:focus-visible {
+  background: var(--surface-muted);
+}
+.overview-account-cash span,
+.overview-account-cash strong {
+  display: block;
+}
+.overview-account-cash span {
+  color: var(--muted);
+  font-size: 12px;
+  margin-bottom: 8px;
+}
+.overview-account-cash strong {
+  font-size: 18px;
+  font-variant-numeric: tabular-nums;
+}

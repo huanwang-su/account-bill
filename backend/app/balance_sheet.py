@@ -2,6 +2,7 @@
 
 from datetime import date
 from sqlalchemy import func
+from .report_context import consistent_read
 from .account_config import AccountGraph, AccountGroupService
 from .domain import Clock, DomainError
 from .models import AccountGroup, Entry, Transaction
@@ -11,6 +12,7 @@ class BalanceSheetService:
     def __init__(self, database):
         self.db = database
 
+    @consistent_read
     def snapshot(self, as_of=None, group_id=None):
         day = as_of or Clock.now()[:10]
         try:

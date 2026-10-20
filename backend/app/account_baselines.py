@@ -69,6 +69,7 @@ class AccountBaselineService:
         snapshots = list(
             session.query(AccountValuation).filter(
                 AccountValuation.account_id.in_(members),
+                AccountValuation.revoked_at.is_(None),
                 AccountValuation.occurred_at >= when,
             )
         )
@@ -107,6 +108,7 @@ class AccountBaselineService:
                     occurred_at=when,
                     idempotency_key="asset-baseline:" + key,
                     source="历史资产基准",
+                    _baseline_reconciliation=True,
                     note=note,
                 ),
                 [Posting(account.id, amount), Posting(system.id, -amount)],
@@ -127,6 +129,7 @@ class AccountBaselineService:
                     occurred_at=old.occurred_at,
                     idempotency_key=f"baseline-offset:{key}:{old.id}",
                     source="历史资产基准",
+                    _baseline_reconciliation=True,
                     note=f"期初基准已前移至 {when}，抵消原期初 #{old.id}，避免资产重复；{note}",
                 ),
                 [Posting(account.id, -original), Posting(system.id, original)],

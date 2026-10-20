@@ -1,6 +1,7 @@
 import React from "react";
+import { StatisticTone as Tone } from "./StatisticTone";
 import { Card, Empty, Select, Tag } from "antd";
-import { MoneyFormatter as Money, type Row } from "./api";
+import { DisplayMoneyFormatter as Money, type Row } from "./api";
 import { AccountDistribution } from "./AccountDistribution";
 import { AccountMovementDistribution } from "./AccountMovementDistribution";
 import { AnalysisDrilldownBar } from "./AnalysisDrilldown";
@@ -306,21 +307,30 @@ export class AccountMovementSection extends React.Component<Props, State> {
           </p>
         )}
         <div className="account-movement-summary">
-          <div className="account-movement-stat">
+          <div
+            className="account-movement-stat"
+            data-tone={Tone.of(totals.opening_balance)}
+          >
             <span>所选范围期初净值</span>
             <strong className="account-movement-stat-value">
               ¥ {Money.format(totals.opening_balance)}
             </strong>
             <small>范围内资金账户期初账面净额</small>
           </div>
-          <div className="account-movement-stat">
+          <div
+            className="account-movement-stat"
+            data-tone={Tone.of(totals.ending_balance)}
+          >
             <span>所选范围期末净值</span>
             <strong className="account-movement-stat-value">
               ¥ {Money.format(totals.ending_balance)}
             </strong>
             <small>范围内资产 − 范围内负债，负值不表示期间亏损</small>
           </div>
-          <div className="account-movement-stat">
+          <div
+            className="account-movement-stat"
+            data-tone={Tone.of(totals.operating_change, "net")}
+          >
             <span>期间净变动（剔除期初）</span>
             <strong className="account-movement-stat-value">
               ¥ {totals.operating_change > 0 ? "+" : ""}

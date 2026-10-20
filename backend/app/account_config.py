@@ -1,6 +1,5 @@
 """Canonical financial accounts and non-overlapping hierarchical ownership groups."""
 
-import json
 from sqlalchemy import func
 from .domain import Clock, DomainError
 from .models import (
@@ -17,10 +16,23 @@ class AccountGraph:
     WEALTH_KINDS = {"证券", "理财"}
 
     def __init__(self, session):
-        self.accounts = {a.id: a for a in session.query(Account)}
+        cached = session.info.get("account_graph_rows")
+        self.accounts = (
+            cached if cached is not None else {a.id: a for a in session.query(Account)}
+        )
+        if session.info.get("read_only"):
+            session.info["account_graph_rows"] = self.accounts
+            self.canonical_cache = session.info.setdefault("canonical_accounts", {})
+            self.member_cache = session.info.setdefault("account_members", {})
+        else:
+            self.canonical_cache, self.member_cache = {}, {}
+        self.read_only = session.info.get("read_only", False)
 
     def canonical(self, key):
         key = int(key)
+        original = key
+        if self.read_only and key in self.canonical_cache:
+            return self.canonical_cache[key]
         seen = set()
         while key in self.accounts:
             if key in seen:
@@ -28,15 +40,16 @@ class AccountGraph:
             seen.add(key)
             account = self.accounts[key]
             if account.merged_into_id is None:
+                self.canonical_cache[original] = account
                 return account
             key = account.merged_into_id
         raise DomainError("账户不存在")
 
     def members(self, key):
         target = self.canonical(key).id
-        return {
-            a.id for a in self.accounts.values() if self.canonical(a.id).id == target
-        }
+        if not self.read_only or target not in self.member_cache:
+            self.member_cache[target] = frozenset(a.id for a in self.accounts.values() if self.canonical(a.id).id == target)
+        return set(self.member_cache[target])
 
     def is_composite(self, key):
         target = self.canonical(key)
@@ -57,6 +70,19 @@ class AccountGraph:
         """A net account retains the funding identity of its underlying components."""
         target = self.canonical(key)
         return self.accounts[int(key)] if self.is_composite(target.id) else target
+
+    def opening_state(self, key):
+        members = self.members(key)
+        missing = sorted(i for i in members if not self.accounts[i].opening_set)
+        return dict(
+            opening_set=not missing,
+            opening_status=(
+                "UNSET"
+                if len(missing) == len(members)
+                else "PARTIAL" if missing else "COMPLETE"
+            ),
+            missing_opening_member_ids=missing,
+        )
 
     def balances(self, session, as_of=None):
         query = session.query(Entry.account_id, func.sum(Entry.amount))
@@ -279,10 +305,7 @@ class AccountMergeService:
                         )
                     )
             source.merged_into_id = target.id
-            target.tags = json.dumps(
-                sorted(set(json.loads(target.tags)) | set(json.loads(source.tags))),
-                ensure_ascii=False,
-            )
+            # Funding identity changes; each account retains its own labels.
             session.add(
                 AccountMergeEvent(
                     source_id=source.id,

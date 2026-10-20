@@ -13,6 +13,8 @@ const { ExpenseWorkspace } = source("ExpenseWorkspace.tsx");
 const { FinancialAnalysisWorkspace } = source("FinancialAnalysisWorkspace.tsx");
 const { InvestmentWorkspace } = source("InvestmentWorkspace.tsx");
 const { CounterpartyWorkspace } = source("CounterpartyWorkspace.tsx");
+const { CounterpartyMovementChart } = source("CounterpartyMovementChart.tsx");
+const { SingleAccountWorkspace } = source("SingleAccountWorkspace.tsx");
 const { ReportCharts } = source("ReportCharts.tsx");
 
 // Execute real callbacks from the components' returned Chart elements. Nothing
@@ -57,7 +59,9 @@ function chart(tree, label) {
 function click(node, seriesIndex, dataIndex, coverage, patch = {}) {
   const option = node.props.option;
   const series = option.series[seriesIndex];
-  const axis = option.xAxis?.type === "category" ? option.xAxis : option.yAxis;
+  const xAxis = Array.isArray(option.xAxis) ? option.xAxis[series.xAxisIndex || 0] : option.xAxis;
+  const yAxis = Array.isArray(option.yAxis) ? option.yAxis[series.yAxisIndex || 0] : option.yAxis;
+  const axis = xAxis?.type === "category" ? xAxis : yAxis;
   if (coverage) {
     assert.equal(series.type, "bar", coverage);
     covered.add(coverage);
@@ -517,6 +521,46 @@ function counterpartyBars() {
   assert.ok(empty.includes("当前条件没有交易方往来") && empty.includes("当前范围没有账户变动"));
 }
 
+function singleAccountCounterpartyBars() {
+  const rows = [
+    transaction(701, "REFUND", "2026-10-07 00:00:00", 200),
+    transaction(702, "EXPENSE", "2026-10-07 23:59:59", 1000),
+    transaction(703, "TRANSFER", "2026-10-08 00:00:00", 700),
+    transaction(704, "TRANSFER", "2026-10-08 23:59:59", 500, { account_change: -500 }),
+  ];
+  const parties = [
+    { key: "alpha", counterparty: "同名交易方", incoming: 200, outgoing: 1000, net: -800, count: 2, transactions: rows.slice(0, 2) },
+    { key: "beta", counterparty: "同名交易方", incoming: 700, outgoing: 500, net: 200, count: 2, transactions: rows.slice(2) },
+  ];
+  const account = freeze({ id: 11, name: "生活账户", analysis_mode: "both", transactions: rows, categories: [], counterparties: { parties, valuations: [] } });
+  const page = instance(SingleAccountWorkspace, props, { loading: false, selected: "11", report: { accounts: [account] } });
+  const child = elements(page.renderCounterparties(account, "test")).find((node) => node.type === CounterpartyMovementChart);
+  const component = instance(CounterpartyMovementChart, child.props);
+  const filters = page.state.filters;
+  for (let series = 0; series < 3; series++) {
+    const bars = chart(component.render(), "生活账户对手交易方收款与付款对比图");
+    for (let index = 0; index < parties.length; index++) {
+      click(bars, series, index, `single-account-party:${["incoming", "outgoing", "net"][series]}`, { dataIndex: 99 });
+      const key = bars.props.option.series[series].data[index].partyKey;
+      assert.equal(page.state.analysisTab, "parties");
+      assert.equal(page.detailScope("parties").party.key, key);
+      const actualRows = tableRows(page.renderTransactions(account, "test", "parties"));
+      assert.deepEqual(ids(actualRows), key === "alpha" ? [[701], [702], [701, 702]][series] : [[703], [704], [703, 704]][series]);
+      const total = actualRows.reduce((sum, row) => sum + row.account_change, 0);
+      assert.equal(series === 2 ? total : Math.abs(total), bars.props.option.series[series].data[index].value * 100);
+    }
+  }
+  assert.equal(page.state.filters, filters);
+  const bars = chart(component.render(), "生活账户对手交易方收款与付款对比图");
+  const scope = page.detailScope("parties");
+  component.props = { ...component.props, loading: true };
+  click(bars, 0, 0);
+  assert.equal(page.detailScope("parties"), scope);
+  component.props = { ...component.props, loading: false, account: { ...account, counterparties: { ...account.counterparties, parties: [...parties] } } };
+  click(bars, 0, 0);
+  assert.equal(page.detailScope("parties"), scope, "Old callbacks cannot select from a replaced account report");
+}
+
 function assertCompleteInventory() {
   const ts = require("typescript");
   const inventory = {};
@@ -537,13 +581,14 @@ function assertCompleteInventory() {
     visit(file);
   }
   assert.deepEqual(inventory, {
+    "CounterpartyMovementChart.tsx": 1,
     "CounterpartyWorkspace.tsx": 4,
     "ExpenseWorkspace.tsx": 1,
     "FinancialAnalysisWorkspace.tsx": 1,
     "InvestmentWorkspace.tsx": 2,
     "ReportCharts.tsx": 3,
   }, "Every new or moved bar series needs a real-callback coverage case");
-  assert.equal(covered.size, 11, "Every one of the 11 bar series executes its actual callback");
+  assert.equal(covered.size, 14, "Every one of the 14 bar series executes its actual callback");
 }
 
 async function run() {
@@ -554,8 +599,9 @@ async function run() {
     reportBars();
     investmentBars();
     counterpartyBars();
+    singleAccountCounterpartyBars();
     assertCompleteInventory();
-    console.log("All 11 bar series passed real-callback, exact date/direction/ID, scope, amount and empty-data checks using synthetic memory fixtures.");
+    console.log("All 14 bar series passed real-callback, exact date/direction/ID, scope, amount and empty-data checks using synthetic memory fixtures.");
   } finally {
     global.fetch = originalFetch;
   }

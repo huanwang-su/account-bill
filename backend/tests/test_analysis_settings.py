@@ -124,6 +124,53 @@ def test_saved_scopes_persist_and_overview_is_independent(configured_ledger):
     assert ReportService(db).integrity()["ok"]
 
 
+def test_single_account_picker_places_followed_accounts_before_excluded(configured_ledger):
+    db, ids = configured_ledger
+    settings = AnalysisSettingsService(db)
+    settings.save(
+        payload(
+            settings.get(),
+            single_account_ids=[ids["wealth"], 6],
+            single_excluded_account_ids=[5, 6],
+        )
+    )
+    service = SingleAccountAnalysisService(db)
+    result = service.analyze("2026-10-01", "2026-10-03")
+    assert [row["id"] for row in result["accounts"]] == [6, ids["wealth"], 5]
+    assert [row["is_followed"] for row in result["accounts"]] == [True, True, False]
+    assert result["configured_account_ids"] == sorted([5, 6, ids["wealth"]])
+    assert len({row["id"] for row in result["accounts"]}) == 3
+    assert service.analyze("2026-10-01", "2026-10-03", 5)["accounts"][0]["is_followed"] is False
+    settings.save(
+        payload(
+            settings.get(),
+            single_account_ids=[5],
+            single_excluded_account_ids=[6, ids["wealth"]],
+        )
+    )
+    refreshed = service.analyze("2026-10-01", "2026-10-03")["accounts"]
+    assert [row["id"] for row in refreshed] == [5, 6, ids["wealth"]]
+    assert [row["is_followed"] for row in refreshed] == [True, False, False]
+
+
+def test_followed_metadata_refreshes_all_account_choice_sources(configured_ledger):
+    from app.report_scope import ReportAccountScope
+
+    db, ids = configured_ledger
+    service = AccountService(db)
+    before = service.list()
+    assert not any(row["is_followed"] for row in before)
+    settings = AnalysisSettingsService(db)
+    for selected in ([6, ids["wealth"]], [5], []):
+        settings.save(payload(settings.get(), single_account_ids=selected))
+        accounts = service.list()
+        assert [row["id"] for row in accounts] == [row["id"] for row in before]
+        assert {row["id"] for row in accounts if row["is_followed"]} == set(selected)
+        assert [row["balance"] for row in accounts] == [row["balance"] for row in before]
+        with db.read() as session:
+            assert ReportAccountScope(session, {}).projection()["followed_account_ids"] == selected
+
+
 def test_configured_single_accounts_reconcile_transfers_profit_and_refunds(
     configured_ledger,
 ):

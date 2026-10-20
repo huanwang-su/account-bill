@@ -71,7 +71,7 @@ class BackupRecords:
     def snapshot(cls, db):
         tables = {}
         fingerprint = hashlib.sha256()
-        with db.gate, sqlite3.connect(db.path) as connection:
+        with db.barrier.shared(), sqlite3.connect(db.path) as connection:
             connection.row_factory = sqlite3.Row
             connection.execute("BEGIN")
             version = connection.execute(
@@ -80,8 +80,14 @@ class BackupRecords:
             fingerprint.update(version.encode())
             for name, table in sorted(cls.TABLES.items()):
                 order = ",".join(f'"{column.name}"' for column in table.primary_key)
+                names = [
+                    column.name
+                    for column in table.columns
+                    if not isinstance(column.type, LargeBinary)
+                ]
+                selected = ",".join('"' + column + '"' for column in names)
                 rows = connection.execute(
-                    f'SELECT * FROM "{name}" ORDER BY {order}'
+                    f'SELECT {selected} FROM "{name}" ORDER BY {order}'
                 ).fetchall()
                 records = []
                 for row in rows:
@@ -96,7 +102,7 @@ class BackupRecords:
                     }
                     fingerprint.update(cls.json_bytes([name, digest_record]))
                     if name == "bill_import_artifacts":
-                        record.pop("content")
+                        record.pop("content", None)
                     records.append(record)
                 tables[name] = records
         return version, tables, fingerprint.hexdigest()
@@ -114,6 +120,7 @@ class BackupRecords:
         )
         output = io.BytesIO()
         with zipfile.ZipFile(output, "w", compression=zipfile.ZIP_DEFLATED) as archive:
+            archive.comment = secrets.token_hex(16).encode("ascii")
             archive.writestr("manifest.json", cls.json_bytes(manifest.model_dump()))
             archive.writestr("data.json", content)
         return output.getvalue(), manifest
@@ -147,10 +154,6 @@ class BackupRecords:
                 )
                 if Clock.normalize(manifest.created_at) != manifest.created_at:
                     raise DomainError("备份时间格式错误")
-                if manifest.schema_version != schema_version:
-                    raise DomainError(
-                        "备份数据版本与当前程序不一致，请使用对应版本程序恢复"
-                    )
                 data = archive.read("data.json")
                 if len(data) > cls.MAX_DATA or not secrets.compare_digest(
                     hashlib.sha256(data).hexdigest(), manifest.sha256
@@ -163,7 +166,11 @@ class BackupRecords:
                 or type(payload["tables"]) is not dict
             ):
                 raise DomainError("备份数据格式错误")
-            tables = payload["tables"]
+            from .backup_migrations import BackupMigrations
+
+            tables = BackupMigrations.upgrade(
+                payload["tables"], manifest.schema_version, schema_version
+            )
             if set(tables) != set(cls.TABLES) or set(manifest.counts) != set(
                 cls.TABLES
             ):
@@ -326,6 +333,9 @@ class BackupValidator:
                         )
                     ):
                         raise DomainError("备份标签格式错误")
+        for row in tables["transactions"]:
+            if row["purpose"] not in ("GENERAL", "VALUATION", "OPENING"):
+                raise DomainError("备份交易用途不合法")
         for row in tables["bills"]:
             BillFacts.model_validate_json(row["facts"])
             if row["classification"] != "null":
@@ -476,7 +486,7 @@ class DataBackupService:
     def restore(self, token, confirmation):
         if confirmation != "OVERWRITE_LEDGER":
             raise DomainError("请先确认覆盖当前工程的全部账本数据和业务设置")
-        with self.guard, self.db.gate:
+        with self.guard, self.db.exclusive():
             self._prune()
             draft = self.drafts.get(token) if isinstance(token, str) else None
             if draft is None:

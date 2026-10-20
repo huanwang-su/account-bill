@@ -2,10 +2,11 @@
 
 from collections import defaultdict
 from datetime import date
+from .report_context import consistent_read
 from .account_config import AccountGraph
 from .models import AccountValuation, Entry, Transaction
 from .domain import DomainError
-from .financial_analysis import FinancialAnalysisService
+from .analysis_period import PeriodSeries
 from .investment_scope import InvestmentScope
 
 
@@ -22,6 +23,7 @@ class InvestmentAnalysisService:
         except (ValueError, TypeError):
             raise DomainError("日期需为 YYYY-MM-DD") from None
 
+    @consistent_read
     def analyze(self, account_id=None, start=None, end=None, grain="month"):
         from .domain import Clock
 
@@ -63,7 +65,8 @@ class InvestmentAnalysisService:
             snapshots = [
                 v
                 for v in s.query(AccountValuation).filter(
-                    AccountValuation.occurred_at <= cutoff
+                    AccountValuation.occurred_at <= cutoff,
+                    AccountValuation.revoked_at.is_(None),
                 )
                 if graph.canonical(v.account_id).id in scope
                 and investment_scope.asset_owner(v.account_id) is not None
@@ -91,7 +94,9 @@ class InvestmentAnalysisService:
                 .filter(Transaction.kind == "OPENING")
             ):
                 baseline_times[key].append(when)
-            for snapshot in s.query(AccountValuation).filter_by(baseline=True):
+            for snapshot in s.query(AccountValuation).filter_by(
+                baseline=True, revoked_at=None
+            ):
                 baseline_times[snapshot.account_id].append(snapshot.occurred_at)
             accounts = {
                 key: dict(
@@ -218,7 +223,7 @@ class InvestmentAnalysisService:
                         )
                     )
                 elif tx.kind in ("INCOME", "EXPENSE", "REFUND"):
-                    valuation = tx.source == "证券余额更新"
+                    valuation = tx.purpose == "VALUATION"
                     for key, value in signed.items():
                         row = accounts[key]
                         row[
@@ -273,7 +278,7 @@ class InvestmentAnalysisService:
             totals["profit_count"] = len(profits)
             assets, cumulative = totals["beginning"], 0
             for period in (
-                FinancialAnalysisService.periods(start, end, grain) if scope else []
+                PeriodSeries.values(start, end, grain) if scope else []
             ):
                 assets += days[period]["asset_change"]
                 cumulative += days[period]["profit"]

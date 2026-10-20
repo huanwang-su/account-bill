@@ -1,3 +1,4 @@
+import { TransactionSemantics } from "./TransactionSemantics";
 import type { Row } from "./api";
 import { SingleAccountPresentation as Presentation } from "./SingleAccountPresentation";
 
@@ -88,7 +89,7 @@ export class SingleAccountDrilldown {
       if (scope.party && !partyIds.has(row.id)) return false;
       if (scope.movement && !movementIds.has(row.id)) return false;
       if (!scope.flow) return true;
-      const valuation = row.source === "证券余额更新";
+      const valuation = TransactionSemantics.isValuation(row);
       switch (scope.flow) {
         case "income":
           return row.kind === "INCOME" && !valuation;

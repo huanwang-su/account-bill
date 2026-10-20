@@ -21,7 +21,9 @@ export class SidebarNavigation extends React.Component<
   Props,
   { openKeys: string[] }
 > {
-  state = { openKeys: this.activeBranch(this.props) };
+  state = {
+    openKeys: Navigation.openKeys(["reports", ...this.activeBranch(this.props)]),
+  };
   activeBranch(props: Props) {
     const parent = Navigation.parent(
       Navigation.target(props.page, props.reportTab).key,
@@ -32,8 +34,13 @@ export class SidebarNavigation extends React.Component<
     if (
       Navigation.target(previous.page, previous.reportTab).key !==
       Navigation.target(this.props.page, this.props.reportTab).key
-    )
-      this.setState({ openKeys: this.activeBranch(this.props) });
+    ) {
+      const parent = this.activeBranch(this.props)[0];
+      if (parent && !this.state.openKeys.includes(parent))
+        this.setState({
+          openKeys: Navigation.openKeys([...this.state.openKeys, parent]),
+        });
+    }
   }
   label(key: string, text: string) {
     const count = this.props.pendingBillCount || 0;

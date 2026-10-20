@@ -226,6 +226,7 @@ class BackupEncryption(LegacyBackupEncryption):
                     raise DomainError("备份解压后的数据超过限制")
                 output = io.BytesIO()
                 with zipfile.ZipFile(output, "w") as plain:
+                    plain.comment = archive.comment
                     for item in files:
                         info = copy.copy(item)
                         info.flag_bits &= ~1

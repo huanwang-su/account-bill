@@ -1,4 +1,5 @@
 import { MoneyFormatter, type Row } from "./api";
+import { AccountChoices } from "./AccountChoices";
 
 export class BillAttention {
   static rows(rows: Row[]) {
@@ -40,7 +41,7 @@ export class BillReviewModel {
     };
   }
   choices() {
-    return this.accounts
+    return AccountChoices.rank(this.accounts)
       .filter(
         (account) =>
           account.active &&

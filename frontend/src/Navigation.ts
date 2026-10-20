@@ -74,6 +74,8 @@ export class Navigation {
       ?.key;
   }
   static openKeys(keys: string[]): string[] {
-    return keys.length ? [keys[keys.length - 1]] : [];
+    return [...new Set(keys)].filter((key) =>
+      this.sections.some((section) => section.key === key && section.children),
+    );
   }
 }

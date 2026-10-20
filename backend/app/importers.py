@@ -1,19 +1,11 @@
 """Extensible statement parsers. File content is data, never executable instructions."""
 
 from abc import ABC, abstractmethod
-from dataclasses import dataclass, asdict
+from dataclasses import dataclass
 from collections import defaultdict
 import csv, io, json, re, hashlib
 from .domain import DomainError, Money, Clock
-from .models import (
-    Account,
-    Category,
-    ImportBatch,
-    ImportRow,
-    ImportSource,
-    Transaction,
-    BillDisposition,
-)
+from .models import Category, ImportBatch, ImportRow, ImportSource, BillDisposition
 from .services import TransactionService, Repository
 from .account_matching import AlipayAccountResolver, StatementAccountResolver
 from .bill_status import BillStatusService
@@ -240,14 +232,23 @@ class ImportService:
         self.registry = registry or ParserRegistry()
         self.account_resolver = AlipayAccountResolver()
 
-    def upload(self, content, filename, provider="alipay", start_at=None):
+    def upload(
+        self,
+        content,
+        filename,
+        provider="alipay",
+        start_at=None,
+        *,
+        parsed=None,
+        apply_routing=True
+    ):
         digest = hashlib.sha256(content).hexdigest()
         provider = (
             self.registry.detect(content, filename) if provider == "auto" else provider
         )
-        statement = self.registry.get(provider).parse(content, filename)
+        statement = parsed or self.registry.get(provider).parse(content, filename)
         with self.db.write() as s:
-            if provider == "alipay":
+            if provider == "alipay" and apply_routing:
                 BillStatusService(self.db).apply_rows(
                     s,
                     [
@@ -339,6 +340,9 @@ class ImportService:
                 elif d["error"]:
                     state = "ERROR"
                     warning = [d["error"]]
+                elif provider == "alipay" and d["direction"] == "不计收支":
+                    state = "IGNORED"
+                    warning = [BillStatusService.REASON]
                 elif BillStatusService.excluded(s, d["source_key"]):
                     state = BillStatusService.routing(s, d["source_key"])
                     warning = [s.get(BillDisposition, d["source_key"]).reason]

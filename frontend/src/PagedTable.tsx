@@ -5,6 +5,12 @@ import type { TableProps } from "antd";
 type Props<T extends object> = Omit<TableProps<T>, "pagination"> & {
   defaultPageSize?: number;
   pageResetKey?: string;
+  remote?: {
+    current: number;
+    pageSize: number;
+    total: number;
+    onChange: (page: number, pageSize: number) => void;
+  };
 };
 
 /** Shared local pagination over the complete, filtered data set. */
@@ -18,6 +24,7 @@ export class PagedTable<T extends object> extends React.Component<
   }
 
   componentDidUpdate(previous: Props<T>) {
+    if (this.props.remote) return;
     const lastPage = Math.max(
       1,
       Math.ceil((this.props.dataSource?.length ?? 0) / this.state.pageSize),
@@ -30,19 +37,22 @@ export class PagedTable<T extends object> extends React.Component<
   }
 
   render() {
-    const { defaultPageSize, pageResetKey, onChange, ...props } = this.props;
-    const total = props.dataSource?.length ?? 0;
+    const { defaultPageSize, pageResetKey, onChange, remote, ...props } =
+      this.props;
+    const total = remote?.total ?? props.dataSource?.length ?? 0;
     const reset = this.state.pageSize;
     return (
       <Table<T>
         {...props}
         size={props.size ?? "middle"}
         pagination={{
-          current: Math.min(
-            this.state.current,
-            Math.max(1, Math.ceil(total / this.state.pageSize)),
-          ),
-          pageSize: this.state.pageSize,
+          current:
+            remote?.current ??
+            Math.min(
+              this.state.current,
+              Math.max(1, Math.ceil(total / this.state.pageSize)),
+            ),
+          pageSize: remote?.pageSize ?? this.state.pageSize,
           total,
           showSizeChanger: total > (defaultPageSize ?? 15),
           hideOnSinglePage: total <= (defaultPageSize ?? 15),
@@ -56,6 +66,12 @@ export class PagedTable<T extends object> extends React.Component<
         }}
         onChange={(pagination, filters, sorter, extra) => {
           const pageSize = pagination.pageSize ?? reset;
+          if (remote) {
+            if (extra.action === "paginate")
+              remote.onChange(pagination.current ?? 1, pageSize);
+            onChange?.(pagination, filters, sorter, extra);
+            return;
+          }
           this.setState({
             pageSize,
             current:

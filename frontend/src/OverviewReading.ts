@@ -1,4 +1,4 @@
-import { MoneyFormatter as Money, type Row } from "./api";
+import { DisplayMoneyFormatter as Money, type Row } from "./api";
 
 /** Explain the snapshot without treating missing history or deposits as returns. */
 export class OverviewReading {

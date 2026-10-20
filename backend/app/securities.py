@@ -27,7 +27,8 @@ class SecuritiesValuationService:
             change=row.change,
             baseline=row.baseline,
             transaction_id=row.transaction_id,
-            status=tx.status if tx else "RECORDED",
+            status="REVERSED" if row.revoked_at else tx.status if tx else "RECORDED",
+            revoked_at=row.revoked_at,
             note=row.note,
         )
 
@@ -43,6 +44,38 @@ class SecuritiesValuationService:
                     AccountValuation.occurred_at.desc(), AccountValuation.id.desc()
                 )
             ]
+
+    def cancel(self, account_id, valuation_id):
+        with self.db.write() as s:
+            graph = AccountGraph(s)
+            row = Repository(s).require(AccountValuation, valuation_id)
+            if row.account_id not in graph.members(account_id):
+                raise DomainError("估值记录不属于该账户")
+            if row.revoked_at:
+                return self.serialize(row, s)
+            newer = (
+                s.query(AccountValuation)
+                .filter(
+                    AccountValuation.account_id.in_(graph.members(account_id)),
+                    AccountValuation.revoked_at.is_(None),
+                    AccountValuation.id != row.id,
+                    (AccountValuation.occurred_at > row.occurred_at) | ((AccountValuation.occurred_at == row.occurred_at) & (AccountValuation.id > row.id)),
+                )
+                .order_by(
+                    AccountValuation.occurred_at.desc(), AccountValuation.id.desc()
+                )
+                .first()
+            )
+            if newer and (newer.occurred_at, newer.id) > (row.occurred_at, row.id):
+                raise DomainError("请先从最近一条开始撤销后续估值")
+            if row.baseline:
+                raise DomainError("期初基准请通过期初余额更正处理")
+            if row.transaction_id:
+                tx = s.get(Transaction, row.transaction_id)
+                if tx.status == "POSTED":
+                    TransactionService(self.db)._reverse(s, tx)
+            row.revoked_at = Clock.now()
+            return self.serialize(row, s)
 
     @staticmethod
     def category(session, kind, name):
@@ -103,11 +136,12 @@ class SecuritiesValuationService:
             last_snapshot = (
                 s.query(func.max(AccountValuation.occurred_at))
                 .filter(AccountValuation.account_id.in_(members))
+                .filter(AccountValuation.revoked_at.is_(None))
                 .scalar()
             )
-            if when < max(latest or when, last_snapshot or when):
+            if when < (last_snapshot or when):
                 raise DomainError(
-                    "更新时间不能早于该账户已有流水或余额更新；请按时间顺序更新"
+                    "更新时间不能早于该账户有效的余额更新；请先撤销后续估值，再按时间顺序重建"
                 )
             initialized = all(graph.accounts[i].opening_set for i in members)
             if not initialized and latest:
@@ -134,6 +168,7 @@ class SecuritiesValuationService:
                             occurred_at=when,
                             note="证券账户首次余额，作为期初基准",
                             source="证券余额更新",
+                            _valuation_update=True,
                             idempotency_key="valuation:" + key,
                         ),
                         [Posting(account_id, actual), Posting(system.id, -actual)],
@@ -156,6 +191,7 @@ class SecuritiesValuationService:
                         counterparty="证券估值",
                         note="余额更新盈亏：" + str(data.get("note", "")),
                         source="证券余额更新",
+                        _valuation_update=True,
                         idempotency_key="valuation:" + key,
                     ),
                 )

@@ -1,3 +1,4 @@
+import { TransactionSemantics } from "./TransactionSemantics";
 import type { Row } from "./api";
 import type { DistributionLink, DistributionNode } from "./AccountDistribution";
 import type { SingleAccountSelection } from "./SingleAccountDrilldown";
@@ -307,7 +308,7 @@ export class SingleAccountFlowData {
   private type(row: Movement) {
     if (row.row.kind === "OPENING")
       return { key: "opening", label: "期初余额录入" };
-    if (row.row.source === "证券余额更新")
+    if (TransactionSemantics.isValuation(row.row))
       return { key: "valuation", label: "证券估值变动" };
     if (row.row.kind === "INCOME") return { key: "income", label: "收入" };
     if (row.row.kind === "EXPENSE")
@@ -367,7 +368,8 @@ export class SingleAccountFlowData {
     const allocations = new Map<string, Map<number, Part[]> | undefined>();
     for (const kind of ["INCOME", "EXPENSE"] as const) {
       const normal = rows.filter(
-        (row) => row.row.kind === kind && row.row.source !== "证券余额更新",
+        (row) =>
+          row.row.kind === kind && !TransactionSemantics.isValuation(row.row),
       );
       const parts = this.categories(normal, kind);
       allocations.set(kind, parts);
@@ -476,8 +478,8 @@ export class SingleAccountFlowData {
           continue;
         if (
           party.valuation ||
-          transaction.source === "证券余额更新" ||
-          original?.source === "证券余额更新"
+          TransactionSemantics.isValuation(transaction) ||
+          TransactionSemantics.isValuation(original)
         ) {
           valuations.add(Number(transaction.id));
           continue;

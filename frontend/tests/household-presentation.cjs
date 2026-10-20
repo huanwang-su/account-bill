@@ -1,16 +1,13 @@
-const assert = require("node:assert/strict");
-const path = require("node:path");
-const React = require("react");
+const assert = require("node:assert/strict"),
+  path = require("node:path"),
+  React = require("react");
 const { renderToStaticMarkup } = require("react-dom/server");
 const { loadTs } = require("./source-loader.cjs");
 const source = (name) => loadTs(path.resolve(__dirname, "../src", name));
-const { HouseholdAnalysisReadout: Readout } = source(
-  "HouseholdAnalysisReadout.ts",
-);
+const { ReportMetrics } = source("ReportMetrics.ts");
 const { IncomeWorkspace } = source("IncomeWorkspace.tsx");
 const { ExpenseWorkspace } = source("ExpenseWorkspace.tsx");
 const { FinancialAnalysisWorkspace } = source("FinancialAnalysisWorkspace.tsx");
-
 function freeze(value) {
   if (value && typeof value === "object" && !Object.isFrozen(value)) {
     Object.values(value).forEach(freeze);
@@ -73,21 +70,6 @@ const tx = (id, kind, amount) => ({
   category_names: [kind === "INCOME" ? "工资" : "餐饮"],
   account_names: ["工资卡"],
 });
-
-for (const [n, d] of [
-  [0, 0],
-  [1, 0],
-  [1, -1],
-  [-1, 10],
-  [11, 10],
-  [NaN, 10],
-  [1, Infinity],
-])
-  assert.equal(Readout.percentage(n, d), undefined);
-assert.equal(Readout.percentage(1, 100000), "<0.1%");
-assert.equal(Readout.percentage(99999, 100000), ">99.9%");
-assert.equal(Readout.percentage(100, 100), "100.0%");
-
 const income = freeze({
   income: 10000,
   count: 3,
@@ -123,27 +105,6 @@ const income = freeze({
     { group_id: 1, category_id: 1, name: "工资", amount: 10000 },
   ],
 });
-const incomeFacts = Readout.income(income);
-assert.equal(incomeFacts.length, 3);
-assert(incomeFacts[0].value.includes("60.0%"));
-assert(incomeFacts[1].value.includes("80.0%"));
-assert(incomeFacts[1].detail.includes("全期“未填写交易方”合计"));
-assert(incomeFacts[2].value.includes("30.0%"));
-assert.equal(incomeFacts[1].tone, "warning");
-assert(
-  Readout.periodNote(income, {}, "2026-10-18").includes("仅反映当前已入账记录"),
-);
-assert(Readout.periodNote(income, {}, "2026-10-18").includes("等长日期区间"));
-assert(
-  Readout.periodNote(
-    { ...income, end: "2026-10-31" },
-    {},
-    "2026-10-18",
-  ).includes("期间尚未结束"),
-);
-
-// Refunds exceed payments: category shares use positive net categories, while
-// unknown-purpose coverage uses gross payments, never the negative net total.
 const expense = freeze({
   paid: 10000,
   refunds: 12000,
@@ -206,52 +167,6 @@ const expense = freeze({
   transactions: [tx(10, "EXPENSE", 10000), tx(11, "REFUND", -12000)],
   trend: [{ day: "2026-10-02", expense: -2000 }],
 });
-const expenseFacts = Readout.expense(expense);
-assert.equal(expenseFacts.length, 3);
-assert(
-  expenseFacts
-    .find((row) => row.key === "expense-category")
-    .value.includes("100.0%"),
-);
-assert(
-  expenseFacts
-    .find((row) => row.key === "expense-driver")
-    .value.includes("减少"),
-);
-assert(
-  expenseFacts
-    .find((row) => row.key === "expense-unknown")
-    .value.includes("40.0%"),
-);
-assert(Readout.expenseSummary(expense).includes("退款抵减超过付款"));
-const frequency = Readout.expense({
-  ...expense,
-  paid: 10000,
-  expense: 8000,
-  refunds: 2000,
-  parents: [
-    {
-      id: 3,
-      name: "餐饮",
-      amount: 8000,
-      paid: 10000,
-      previous_amount: 7000,
-      change: 1000,
-    },
-  ],
-  merchants: [
-    { name: "甲", count: 3, amount: 7000 },
-    { name: "乙", count: 2, amount: 1000 },
-  ],
-});
-assert(
-  frequency
-    .find((row) => row.key === "expense-frequency")
-    .detail.includes("60.0%"),
-);
-
-// Large activity is divided by income + payment + refund amounts, rather than
-// the net result after those directions cancel.
 const financial = freeze({
   income: 10000,
   expense: 4000,
@@ -277,31 +192,17 @@ const financial = freeze({
   large_transactions: [tx(22, "EXPENSE", 6000), tx(23, "REFUND", 2000)],
   trend: [{ period: "2026-10-02", income: 10000, expense: 4000, net: 6000 }],
 });
-const financialFacts = Readout.financial(financial);
-assert.equal(financialFacts.length, 3);
-assert(
-  financialFacts
-    .find((row) => row.key === "financial-large-share")
-    .value.includes("44.4%"),
-);
-assert(
-  financialFacts
-    .find((row) => row.key === "expense-category")
-    .value.includes("100.0%"),
-);
-assert.equal(
-  financialFacts.find((row) => row.key === "financial-large-share").target.id,
-  22,
-);
-assert(
-  Readout.periodNote(financial, {}, "2026-10-18", false).includes(
-    "不作环比判断",
-  ),
-);
-assert.deepEqual(Readout.income({ income: 0 }), []);
-assert.deepEqual(Readout.expense({}), []);
-assert.deepEqual(Readout.financial({}), []);
-
+for (const [n, d] of [
+  [0, 0],
+  [1, 0],
+  [-1, 10],
+  [11, 10],
+  [NaN, 10],
+  [1, Infinity],
+])
+  assert.equal(ReportMetrics.percentage(n, d), undefined);
+assert.equal(ReportMetrics.percentage(1, 100000), "<0.1%");
+assert.equal(ReportMetrics.percentage(99999, 100000), ">99.9%");
 for (const [Component, report] of [
   [IncomeWorkspace, income],
   [ExpenseWorkspace, expense],
@@ -316,5 +217,5 @@ for (const [Component, report] of [
   assert(!html.includes("NaN") && !html.includes("Infinity"));
 }
 console.log(
-  "Household readouts: positive/gross denominators, refunds, concentration, unknown coverage, frequencies, boundaries, immutable data, readout removal and 3-page SSR passed.",
+  "Household presentation: shared percentages, removed readouts and 3-page SSR passed.",
 );

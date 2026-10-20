@@ -1,15 +1,25 @@
 from contextlib import contextmanager
+from contextvars import ContextVar
+import uuid
 from pathlib import Path
 import sqlite3
 from threading import RLock
 from sqlalchemy import create_engine, event, text
 from sqlalchemy.orm import sessionmaker
-from .models import Base, Account, Category
+from .models import Account, Category
 
 
 class Database:
     def __init__(self, path):
         self.gate = RLock()
+        from .concurrency import RestoreBarrier
+
+        self.barrier = RestoreBarrier()
+        self.current = ContextVar("ledger-session-" + uuid.uuid4().hex, default=None)
+        self.revision = uuid.uuid4().hex
+        from .read_cache import ReadCache
+
+        self.read_cache = ReadCache()
         self.path = Path(path).resolve()
         self.path.parent.mkdir(parents=True, exist_ok=True)
         self.engine = create_engine(
@@ -26,15 +36,10 @@ class Database:
         self.sessions = sessionmaker(bind=self.engine, expire_on_commit=False)
 
     def initialize(self):
-        from alembic.config import Config
         from alembic import command
+        from .schema_versions import SchemaVersions
 
-        root = Path(__file__).resolve().parents[1]
-        config = Config(str(root / "alembic.ini"))
-        config.set_main_option("script_location", str(root / "migrations"))
-        config.set_main_option(
-            "sqlalchemy.url", "sqlite:///" + str(self.path).replace("%", "%%")
-        )
+        config = SchemaVersions.config(self.path)
         if self.path.exists():
             with sqlite3.connect(self.path) as c:
                 has_version = c.execute(
@@ -45,7 +50,7 @@ class Database:
                     if has_version
                     else None
                 )
-            if current and current[0] != "015":
+            if current and current[0] != SchemaVersions.head():
                 self.backup(str(self.path) + ".before-upgrade-" + current[0])
         command.upgrade(config, "head")
         with self.write() as s:
@@ -92,19 +97,48 @@ class Database:
 
     @contextmanager
     def read(self):
-        with self.gate, self.sessions() as s:
-            yield s
+        active = self.current.get()
+        if active:
+            yield active
+            return
+        with self.barrier.shared(), self.sessions() as s:
+            s.info["read_only"] = True
+            s.info["revision"] = self.revision
+            s.execute(text("BEGIN"))
+            token = self.current.set(s)
+            try:
+                yield s
+            finally:
+                self.current.reset(token)
 
     @contextmanager
     def write(self):
-        with self.gate, self.sessions() as s:
+        active = self.current.get()
+        if active:
+            if active.info.get("read_only"):
+                raise RuntimeError("Cannot write inside a report snapshot")
+            yield active
+            return
+        with self.barrier.shared(), self.gate, self.sessions() as s:
+            token = self.current.set(s)
             try:
                 s.execute(text("BEGIN IMMEDIATE"))
                 yield s
                 s.commit()
+                self.revision = uuid.uuid4().hex
+                self.read_cache.clear()
             except Exception:
                 s.rollback()
                 raise
+            finally:
+                self.current.reset(token)
+
+    @contextmanager
+    def exclusive(self):
+        with self.barrier.exclusive(), self.gate:
+            yield
+            self.revision = uuid.uuid4().hex
+            self.read_cache.clear()
 
     def backup(self, target):
         with self.gate, sqlite3.connect(self.path) as source, sqlite3.connect(

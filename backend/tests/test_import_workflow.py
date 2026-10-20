@@ -127,13 +127,14 @@ def test_same_id_changed_facts_conflict_is_atomic(flow):
         .encode("utf-8")
     )
     run_id = flow.stage(raw, "changed.csv")["run_id"]
-    flow.classify(run_id, classify_run(flow, run_id).model_dump_json().encode())
+    with pytest.raises(DomainError):
+        flow.classify(run_id, classify_run(flow, run_id).model_dump_json().encode())
     assert any(r["conflict"] for r in flow.detail(run_id)["rows"])
     with pytest.raises(DomainError):
         flow.commit(run_id)
     assert flow.bills.export().model_dump() == before
     assert flow.detail(run_id)["error"]
-    assert flow.detail(run_id)["status"] == "CLASSIFIED"
+    assert flow.detail(run_id)["status"] == "ERROR"
 
 
 def test_failed_original_preserved_and_classified_versions_immutable(flow):

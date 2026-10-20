@@ -1,0 +1,178 @@
+/* A quiet desktop finish: tonal surfaces, static depth and deliberate feedback. */
+main {
+  background-image: linear-gradient(
+    180deg,
+    rgba(var(--accent-rgb), 0.035),
+    transparent 320px
+  );
+  min-height: 100vh;
+}
+.app-shell > aside {
+  background: linear-gradient(180deg, var(--surface) 65%, var(--surface-muted));
+}
+.brand-mark {
+  background: linear-gradient(145deg, var(--hero-end), var(--hero-bg));
+  box-shadow:
+    inset 0 0 0 1px #ffffff18,
+    0 3px 8px rgba(var(--accent-rgb), 0.12);
+}
+.workspace-heading h1 {
+  font-weight: 650;
+  letter-spacing: -0.5px;
+}
+.today {
+  border-right: 1px solid var(--border);
+  padding-right: 16px;
+  margin-right: 0;
+}
+.status-dot {
+  background: var(--positive);
+  box-shadow: 0 0 0 3px rgba(var(--accent-rgb), 0.08);
+}
+.sidebar-navigation .ant-menu-item,
+.sidebar-navigation .ant-menu-submenu-title {
+  transition:
+    background-color 160ms ease,
+    color 160ms ease;
+}
+.sidebar-navigation,
+.single-account-options,
+.account-group-navigation .ant-tree {
+  scrollbar-color: rgba(var(--accent-rgb), 0.25) transparent;
+}
+.sidebar-navigation .ant-menu-item-selected::before {
+  animation: selection-arrive 280ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+.ant-card-head-title {
+  font-weight: 600;
+  letter-spacing: 0.1px;
+}
+.ant-card-extra .ant-btn-link {
+  font-size: 12px;
+}
+.metric.featured {
+  background: linear-gradient(118deg, var(--hero-bg), var(--hero-end));
+  box-shadow: inset 0 0 0 1px #ffffff0a;
+}
+.metric strong,
+.overview-cashflow strong {
+  letter-spacing: -0.5px;
+}
+.overview-hero {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+  background: linear-gradient(118deg, var(--hero-bg), var(--hero-end));
+  border: 1px solid #ffffff16;
+  box-shadow:
+    inset 0 1px 0 #ffffff0c,
+    0 8px 24px rgba(var(--accent-rgb), 0.07);
+}
+.overview-hero::before {
+  content: "";
+  position: absolute;
+  z-index: 0;
+  width: 370px;
+  height: 370px;
+  right: -110px;
+  top: -190px;
+  border-radius: 50%;
+  border: 1px solid #ffffff12;
+  box-shadow:
+    0 0 0 54px #ffffff05,
+    0 0 0 108px #ffffff04;
+  pointer-events: none;
+}
+.overview-hero > * {
+  position: relative;
+  z-index: 1;
+}
+.overview-cashflow > .ant-card {
+  position: relative;
+}
+.overview-cashflow > .ant-card::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 20px;
+  width: 28px;
+  height: 3px;
+  border-radius: 0 0 3px 3px;
+  background: var(--primary);
+}
+.overview-cashflow > .ant-card:nth-child(1)::before {
+  background: var(--positive);
+}
+.overview-cashflow > .ant-card:nth-child(2)::before {
+  background: var(--expense);
+}
+.overview-attention button,
+.overview-activity button {
+  border-radius: 8px;
+  transition:
+    background-color 160ms ease,
+    color 160ms ease;
+}
+.overview-attention button:hover,
+.overview-attention button:focus-visible,
+.overview-activity button:focus-visible {
+  background: var(--surface-muted);
+}
+.overview-attention button:focus-visible,
+.overview-activity button:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 3px;
+}
+.overview-attention button > .anticon {
+  color: var(--muted);
+}
+.ant-btn-link .anticon-arrow-right,
+.overview-attention button > .anticon-arrow-right {
+  transition: transform 220ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+.ant-btn-link:hover .anticon-arrow-right,
+.ant-btn-link:focus-visible .anticon-arrow-right,
+.overview-attention button:hover > .anticon-arrow-right,
+.overview-attention button:focus-visible > .anticon-arrow-right {
+  transform: translateX(4px);
+}
+.single-account-option {
+  transition:
+    background-color 180ms ease,
+    border-color 180ms ease,
+    box-shadow 180ms ease,
+    transform 220ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+.single-account-option:hover {
+  border-color: rgba(var(--accent-rgb), 0.24);
+  transform: translateY(-2px);
+}
+.single-account-option:active {
+  transform: translateY(0);
+}
+.single-account-option[aria-pressed="true"] {
+  border-color: var(--primary);
+  box-shadow: inset 0 -3px 0 var(--primary);
+}
+.single-account-analysis-tabs .ant-tabs-tabpane-active {
+  animation: detail-arrive 320ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+.ant-btn:not(.ant-btn-link):not(.ant-btn-text) {
+  transition:
+    background-color 180ms ease,
+    border-color 180ms ease,
+    color 180ms ease,
+    box-shadow 220ms ease,
+    transform 180ms ease;
+}
+.ant-btn:not(:disabled):not(.ant-btn-loading):not(.ant-btn-link):not(
+    .ant-btn-text
+  ):hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 10px rgba(var(--accent-rgb), 0.12);
+}
+.ant-btn:not(:disabled):not(.ant-btn-loading):not(.ant-btn-link):not(
+    .ant-btn-text
+  ):active {
+  transform: translateY(0) scale(0.97);
+}

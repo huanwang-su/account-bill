@@ -5,7 +5,7 @@ from datetime import date, timedelta
 from sqlalchemy import func
 from .models import Transaction
 from .domain import Clock, DomainError
-from .expense_analysis import AnalysisPeriod
+from .analysis_period import AnalysisPeriod
 
 
 class OverviewPeriod:

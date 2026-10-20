@@ -2,14 +2,7 @@
 
 import json
 from .domain import Clock, DomainError
-from .models import (
-    Bill,
-    BillDisposition,
-    BillLedger,
-    ImportBatch,
-    ImportRow,
-    Transaction,
-)
+from .models import Bill, BillDisposition, ImportBatch, ImportRow
 
 
 class BillStatusService:

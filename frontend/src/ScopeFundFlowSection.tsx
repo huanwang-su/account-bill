@@ -1,9 +1,11 @@
 import React from "react";
+import { AccountChoices } from "./AccountChoices";
+import { StatisticTone as Tone } from "./StatisticTone";
 import { Button, Card, Empty, Select, Spin, Tabs } from "antd";
 import {
   AccountGroupTree,
   LedgerApi,
-  MoneyFormatter as Money,
+  DisplayMoneyFormatter as Money,
   type Row,
 } from "./api";
 import { AnalysisDrilldownBar } from "./AnalysisDrilldown";
@@ -84,7 +86,10 @@ export class ScopeFundFlowSection extends React.Component<Props, State> {
         dimension === "group"
           ? report.group_scopes
           : dimension === "account"
-            ? report.account_scopes
+            ? AccountChoices.rank<Row>(
+                report.account_scopes,
+                report.account_scope?.followed_account_ids,
+              )
             : [report.summary];
       const existing = candidates.some(
         (row: Row) => row.key === this.state.scopeKey,
@@ -115,7 +120,10 @@ export class ScopeFundFlowSection extends React.Component<Props, State> {
         ? [report.summary]
         : dimension === "group"
           ? report.group_scopes
-          : report.account_scopes;
+          : AccountChoices.rank<Row>(
+              report.account_scopes,
+              report.account_scope?.followed_account_ids,
+            );
   }
   changeDimension(dimension: State["dimension"]) {
     this.detailFocus.cancel();
@@ -173,15 +181,7 @@ export class ScopeFundFlowSection extends React.Component<Props, State> {
   }
   renderReport(report: Row) {
     const data = new ScopeFundFlowData(report, this.state.scopeKey),
-      scope = data.scope,
-      local = data.summary(this.state.selection);
-    const rows = data.transactions(this.state.selection);
-    const reset = JSON.stringify([
-      report.start_at,
-      report.end_at,
-      this.state.scopeKey,
-      this.state.selection,
-    ]);
+      scope = data.scope;
     return (
       <>
         <div className="scope-fund-flow-controls">
@@ -245,7 +245,20 @@ export class ScopeFundFlowSection extends React.Component<Props, State> {
               `${scope.internal_count} 笔，不计入上方进出`,
             ],
           ].map(([title, value, note]) => (
-            <div className="fund-flow-stat" key={String(title)}>
+            <div
+              className="fund-flow-stat"
+              key={String(title)}
+              data-tone={Tone.of(
+                Number(value),
+                title === "资金流入"
+                  ? "income"
+                  : title === "资金流出"
+                    ? "expense"
+                    : title === "净流入"
+                      ? "net"
+                      : "neutral",
+              )}
+            >
               <span>{title}</span>
               <strong>
                 ¥ {this.amount(Number(value), title === "净流入")}
@@ -282,6 +295,22 @@ export class ScopeFundFlowSection extends React.Component<Props, State> {
             点击方向、对手或连线，直接查看对应交易。图中金额不包含内部互转；范围净流入可与含估值、调整的账户余额变化不同。
           </p>
         </div>
+        {this.renderDetails(report, data)}
+      </>
+    );
+  }
+  renderDetails(report: Row, data: ScopeFundFlowData) {
+    const scope = data.scope,
+      local = data.summary(this.state.selection),
+      rows = data.transactions(this.state.selection);
+    const reset = JSON.stringify([
+      report.start_at,
+      report.end_at,
+      this.state.scopeKey,
+      this.state.selection,
+    ]);
+    return (
+      <>
         <AnalysisDrilldownBar
           elementRef={this.detailFocus.ref}
           label="范围进出明细"
@@ -301,8 +330,24 @@ export class ScopeFundFlowSection extends React.Component<Props, State> {
           emptyText={`显示${this.scopeName(scope)}的全部跨范围进出`}
         />
         <p className="fund-flow-local-total">
-          <span>本区流入 ¥ {this.amount(local.incoming)}</span>
-          <span>流出 ¥ {this.amount(local.outgoing)}</span>
+          <span>
+            本区流入{" "}
+            <strong
+              className="statistic-value"
+              data-tone={Tone.of(local.incoming, "income")}
+            >
+              ¥ {this.amount(local.incoming)}
+            </strong>
+          </span>
+          <span>
+            流出{" "}
+            <strong
+              className="statistic-value"
+              data-tone={Tone.of(local.outgoing, "expense")}
+            >
+              ¥ {this.amount(local.outgoing)}
+            </strong>
+          </span>
           <span>{local.count} 笔交易</span>
         </p>
         <Tabs

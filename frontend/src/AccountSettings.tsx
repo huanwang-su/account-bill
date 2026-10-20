@@ -1,4 +1,5 @@
 import React from "react";
+import { AccountChoices } from "./AccountChoices";
 import {
   Alert,
   Button,
@@ -16,7 +17,7 @@ import {
 } from "antd";
 import {
   LedgerApi,
-  MoneyFormatter as Money,
+  DisplayMoneyFormatter as Money,
   AccountGroupTree,
   Row,
 } from "./api";
@@ -58,7 +59,7 @@ export class AccountSettings extends React.Component<Props, State> {
   }
   render() {
     const { accounts, groups } = this.props;
-    const options = accounts
+    const options = AccountChoices.rank(accounts)
       .filter((a) => a.role !== "SYSTEM" && !a.merged_into_id && a.active)
       .map((a) => ({ value: a.id, label: a.name }));
     const tree = new AccountGroupTree(groups);

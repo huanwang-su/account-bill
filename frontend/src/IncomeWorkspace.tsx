@@ -1,10 +1,13 @@
+import { MetricCard } from "./MetricCard";
+import { LatestRequest } from "./LatestRequest";
 import { ReportPeriodFilter } from "./ReportPeriodFilter";
 import React from "react";
+import { StatisticTone as Tone } from "./StatisticTone";
+import { AmountInput as InputNumber } from "./AmountInput";
 import {
   Button,
   Card,
   Empty,
-  InputNumber,
   Select,
   Space,
   Spin,
@@ -17,7 +20,7 @@ import {
   AccountGroupTree,
   CategoryTree,
   LedgerApi,
-  MoneyFormatter as Money,
+  DisplayMoneyFormatter as Money,
   Row,
 } from "./api";
 import {
@@ -40,7 +43,7 @@ import {
   type DetailPeriod,
 } from "./AnalysisDrilldown";
 
-import { HouseholdAnalysisReadout as Readout } from "./HouseholdAnalysisReadout";
+import { ReportMetrics as Readout } from "./ReportMetrics";
 
 interface Props {
   accounts: Row[];
@@ -64,7 +67,7 @@ interface State {
 }
 export class IncomeWorkspace extends React.Component<Props, State> {
   api = new LedgerApi();
-  requestVersion = 0;
+  loader = new LatestRequest(this.api);
   detailFocus = new AnalysisDetailFocus();
   state: State = {
     filters: this.defaultFilters(),
@@ -83,12 +86,12 @@ export class IncomeWorkspace extends React.Component<Props, State> {
     if (previous.refreshKey !== this.props.refreshKey) this.load();
   }
   componentWillUnmount() {
-    this.requestVersion++;
+    this.loader.dispose();
     this.detailFocus.cancel();
   }
   async load(reveal = false) {
     if (!reveal) this.detailFocus.cancel();
-    const version = ++this.requestVersion;
+    const version = this.loader.begin();
     this.setState({ loading: true });
     try {
       const report = await this.api.request(
@@ -100,12 +103,12 @@ export class IncomeWorkspace extends React.Component<Props, State> {
             large_amount: this.state.threshold,
           }),
       );
-      if (version === this.requestVersion)
+      if (this.loader.current(version))
         this.setState({ report, loading: false }, () =>
           this.detailFocus.afterRender(),
         );
     } catch (error) {
-      if (version === this.requestVersion) {
+      if (this.loader.current(version)) {
         this.detailFocus.cancel();
         this.setState({ loading: false });
         message.error(
@@ -493,12 +496,18 @@ export class IncomeWorkspace extends React.Component<Props, State> {
         ) : (
           <Spin spinning={loading}>
             <div className="metrics analysis-metrics">
-              <div className="metric featured">
+              <MetricCard
+                className="metric featured"
+                data-tone={Tone.of(report.income, "income")}
+              >
                 <span>收入总额</span>
                 <strong>¥ {Money.format(report.income)}</strong>
                 <small>{report.count} 笔已入账收入</small>
-              </div>
-              <div className="metric">
+              </MetricCard>
+              <MetricCard
+                className="metric"
+                data-tone={Tone.of(report.change, "net")}
+              >
                 <span>较上期</span>
                 <strong>
                   {report.change > 0 ? "+" : ""}
@@ -510,19 +519,22 @@ export class IncomeWorkspace extends React.Component<Props, State> {
                     : `${report.change_ratio > 0 ? "+" : ""}${(report.change_ratio * 100).toFixed(1)}%`}{" "}
                   · {report.previous_start} 至 {report.previous_end}
                 </small>
-              </div>
-              <div className="metric">
+              </MetricCard>
+              <MetricCard
+                className="metric"
+                data-tone={Tone.of(report.average, "income")}
+              >
                 <span>平均每笔收入</span>
                 <strong>¥ {Money.format(report.average)}</strong>
                 <small>日均 ¥ {Money.format(report.average_daily)}</small>
-              </div>
-              <div className="metric">
+              </MetricCard>
+              <MetricCard className="metric">
                 <span>大额收入</span>
                 <strong>
                   {report.large_count} <small>笔</small>
                 </strong>
                 <small>合计 ¥ {Money.format(report.large_income)}</small>
-              </div>
+              </MetricCard>
             </div>
 
             <Card

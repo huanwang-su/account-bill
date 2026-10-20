@@ -1,12 +1,13 @@
 import React from "react";
 import { Button, Space } from "antd";
 import type { Row } from "./api";
+import { AccountChoices } from "./AccountChoices";
 
 /** Both report workspaces share canonical account choices and wealth defaults. */
 export class AnalysisAccountSelection {
   constructor(public accounts: Row[]) {}
   choices() {
-    return this.accounts.filter(
+    return AccountChoices.rank(this.accounts).filter(
       (a) => !a.merged_into_id && ["ASSET", "LIABILITY"].includes(a.role),
     );
   }

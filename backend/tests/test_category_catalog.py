@@ -142,7 +142,12 @@ def test_upgrade_keeps_every_journal_and_aliases_old_ids(tmp_path):
         assert s.get(Bill, "demo").facts == facts
     with sqlite3.connect(path) as c:
         assert c.execute("select * from entries").fetchall() == original_entries
-        assert c.execute("select * from transactions").fetchall() == original_tx
+        assert (
+            c.execute(
+                "select id,kind,occurred_at,posted_at,counterparty,note,tags,status,idempotency_key,reversal_of,related_id,source from transactions"
+            ).fetchall()
+            == original_tx
+        )
         assert not c.execute("pragma foreign_key_check").fetchall()
     assert AccountService(db).list()[1]["balance"] == -100
     category_id = next(

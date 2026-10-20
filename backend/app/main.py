@@ -1,19 +1,17 @@
 from pathlib import Path
-import os, json, csv, io, tempfile, sqlite3
-from urllib.parse import urlparse, quote
+import os
+from urllib.parse import urlparse
 from threading import RLock
-from fastapi import FastAPI, Request, UploadFile, File, Form
-from fastapi.responses import JSONResponse, FileResponse, Response
+from fastapi import FastAPI
+from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.trustedhost import TrustedHostMiddleware
-from starlette.background import BackgroundTask
-from starlette.concurrency import run_in_threadpool
 from sqlalchemy.exc import IntegrityError
 from .database import Database, ProcessLease
-from .domain import DomainError, Clock
+from .domain import DomainError
 from .services import AccountService, CatalogService, TransactionService, ReportService
 from .importers import ImportService
-from .bills import BillService, BillDocument
+from .bills import BillService
 from .import_workflow import BillImportWorkflow
 from .bill_posting import BillPostingService
 from .bill_status import BillStatusService
@@ -35,7 +33,7 @@ from .overview_period import OverviewPeriod
 from .income_analysis import IncomeAnalysisService
 from .analysis_settings import AnalysisSettingsService
 from .single_account_analysis import SingleAccountAnalysisService
-from .data_backup import DataBackupService, BackupRecords
+from .data_backup import DataBackupService
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -66,17 +64,22 @@ class LedgerApplication:
         self.single_accounts = SingleAccountAnalysisService(self.db)
         self.overview = OverviewService(self.db)
         self.imports = ImportService(self.db)
-        self.imports.link_existing_pouches()
         self.bills = BillService(self.db)
         self.workflow = BillImportWorkflow(self.db)
         self.refunds = RefundMatchService(self.db)
         self.policy = ClassificationPolicyService(self.db)
         self.transfers = TransferMatchService(self.db)
         self.associations = BillAssociationService(self.db)
-        self.workflow.recover_legacy()
         self.posting = BillPostingService(self.db)
-        self.posting.backfill()
-        BillStatusService(self.db).apply_existing()
+        from .maintenance import MaintenanceRunner
+
+        def upgrade_legacy():
+            self.imports.link_existing_pouches()
+            self.workflow.recover_legacy()
+            self.posting.backfill()
+            BillStatusService(self.db).apply_existing()
+
+        MaintenanceRunner(self.db).run("legacy-bill-links-v1", upgrade_legacy)
         self.lock = RLock()
         self.data_backup = DataBackupService(self.db)
         self.app = FastAPI(title="有数 · 本地账本", version="0.18.0")
@@ -116,72 +119,6 @@ class LedgerApplication:
     def _routes(self):
         app = self.app
 
-        @app.get("/api/bills/association-candidates")
-        def association_candidates(bill_id: str):
-            return self.associations.candidates(bill_id)
-
-        @app.post("/api/bills/associate")
-        def associate_bills(data: dict):
-            return self.associations.link(
-                data.get("source_id"), data.get("target_id"), data.get("note")
-            )
-
-        @app.get("/api/analysis-settings")
-        def analysis_settings():
-            return self.analysis_settings.get()
-
-        @app.put("/api/analysis-settings")
-        def save_analysis_settings(data: dict):
-            return self.analysis_settings.save(data)
-
-        @app.get("/api/reports/period")
-        def report_period(request: Request):
-            return dict(
-                OverviewPeriod(self.db, dict(request.query_params)).projection(),
-                today=Clock.now()[:10],
-            )
-
-        @app.get("/api/reports/single-accounts")
-        def single_account_analysis(
-            request: Request, start: str = None, end: str = None, account_id: int = None
-        ):
-            filters = self.period_filters(request)
-            return self.single_accounts.analyze(
-                filters.get("start"), filters.get("end"), account_id
-            )
-
-        @app.get("/api/classification-policy")
-        def classification_policy():
-            return self.policy.get()
-
-        @app.put("/api/classification-policy")
-        def save_classification_policy(data: dict):
-            return self.policy.save(data)
-
-        @app.get("/api/classification-policy/reference")
-        def policy_reference():
-            return Response(
-                json.dumps(self.policy.reference(), ensure_ascii=False, indent=2),
-                media_type="application/json",
-                headers={
-                    "Content-Disposition": "attachment; filename=ai-classification-reference.json"
-                },
-            )
-
-        @app.post("/api/classification-policy/reprocess")
-        def reprocess_pending():
-            return self.policy.reprocess()
-
-        @app.post("/api/bills/confirmed-transfer")
-        def confirm_transfer(data: dict):
-            from .confirmed_transfers import ConfirmedTransferService
-
-            return ConfirmedTransferService(self.db).confirm(data)
-
-        @app.post("/api/internal-transfers/match")
-        def match_internal_transfers():
-            return self.transfers.auto()
-
         @app.middleware("http")
         async def local_only(request, call_next):
             origin = request.headers.get("origin")
@@ -196,7 +133,12 @@ class LedgerApplication:
                 )
             response = await call_next(request)
             response.headers["X-Content-Type-Options"] = "nosniff"
-            response.headers["Cache-Control"] = "no-store"
+            if request.url.path.startswith("/assets/") and response.status_code == 200:
+                response.headers["Cache-Control"] = (
+                    "public, max-age=31536000, immutable"
+                )
+            else:
+                response.headers["Cache-Control"] = "no-store"
             return response
 
         @app.exception_handler(DomainError)
@@ -213,507 +155,10 @@ class LedgerApplication:
                 {"detail": "缺少必填字段：" + str(error)}, status_code=400
             )
 
-        @app.get("/api/health")
-        def health():
-            return {"ok": True, "name": "有数", "version": app.version}
+        from .routes import accounts, catalog, reports, imports, backup
 
-        @app.get("/api/account-groups")
-        def groups():
-            return self.account_groups.list()
-
-        @app.post("/api/account-groups")
-        def create_group(data: dict):
-            return self.account_groups.save(data)
-
-        @app.put("/api/account-groups/{key}")
-        def edit_group(key: int, data: dict):
-            return self.account_groups.save(data, key)
-
-        @app.post("/api/account-groups/assign")
-        def assign_group(data: dict):
-            return self.account_groups.assign(data.get("group_id"), data["account_ids"])
-
-        @app.post("/api/account-merges/preview")
-        def preview_merge(data: dict):
-            return self.account_merges.preview(data["source_id"], data["target_id"])
-
-        @app.post("/api/account-merges")
-        def merge_account(data: dict):
-            return self.account_merges.merge(data)
-
-        @app.post("/api/account-merges/{key}/undo")
-        def undo_merge(key: int):
-            return self.account_merges.unmerge(key)
-
-        @app.get("/api/account-merges")
-        def merge_history():
-            return self.account_merges.history()
-
-        @app.get("/api/accounts")
-        def accounts():
-            return self.accounts.list()
-
-        @app.post("/api/accounts")
-        def create_account(data: dict):
-            return self.accounts.save(data)
-
-        @app.put("/api/accounts/{key}")
-        def edit_account(key: int, data: dict):
-            return self.accounts.save(data, key)
-
-        @app.post("/api/accounts/{key}/opening")
-        def opening(key: int, data: dict):
-            return self.accounts.opening(key, data)
-
-        @app.post("/api/accounts/{key}/reconcile")
-        def reconcile(key: int, data: dict):
-            return self.accounts.reconcile(key, data)
-
-        @app.get("/api/accounts/{key}/valuations")
-        def valuations(key: int):
-            return self.securities.history(key)
-
-        @app.post("/api/accounts/{key}/valuations")
-        def update_valuation(key: int, data: dict):
-            return self.securities.update(key, data)
-
-        @app.get("/api/reports/counterparties")
-        def counterparties(request: Request, account_id: int):
-            return self.counterparties.analyze(account_id, self.period_filters(request))
-
-        @app.get("/api/reports/investments")
-        def investments(
-            request: Request,
-            account_id: int = None,
-            start: str = None,
-            end: str = None,
-            grain: str = "month",
-        ):
-            filters = self.period_filters(request)
-            return self.investments.analyze(
-                account_id, filters.get("start"), filters.get("end"), grain
-            )
-
-        @app.get("/api/categories")
-        def categories():
-            return self.catalog.categories()
-
-        @app.post("/api/categories")
-        def create_category(data: dict):
-            return self.catalog.save_category(data)
-
-        @app.put("/api/categories/{key}")
-        def edit_category(key: int, data: dict):
-            return self.catalog.save_category(data, key)
-
-        @app.get("/api/tags")
-        def tags():
-            return self.catalog.tags()
-
-        @app.post("/api/tags")
-        def create_tag(data: dict):
-            return self.catalog.save_tag(data)
-
-        @app.put("/api/tags/{key}")
-        def edit_tag(key: int, data: dict):
-            return self.catalog.save_tag(data, key)
-
-        @app.post("/api/tags/{key}/activation")
-        def tag_activation(key: int, data: dict):
-            return self.catalog.set_tag_active(key, data.get("active"))
-
-        @app.get("/api/transactions")
-        def transactions(request: Request):
-            f = self.period_filters(request)
-            return self.reports.list(f, audit=f.get("audit") == "true")
-
-        @app.get("/api/reports/balance-sheet")
-        def balance_sheet(as_of: str = None, group_id: int = None):
-            return self.balance_sheet.snapshot(as_of, group_id)
-
-        @app.get("/api/reports/analysis")
-        def financial_analysis(
-            request: Request,
-            grain: str = "day",
-            level: int = 1,
-            large_amount: str = None,
-            large_income_amount: str = None,
-            large_expense_amount: str = None,
-            group_id: int = None,
-            account_id: int = None,
-            category_id: int = None,
-        ):
-            return self.financial_analysis.analyze(
-                self.period_filters(request), grain, level, large_amount
-            )
-
-        @app.get("/api/reports/fund-flows")
-        def fund_flows(
-            request: Request,
-            start: str = None,
-            end: str = None,
-            group_id: int = None,
-            account_id: int = None,
-        ):
-            return self.fund_flows.analyze(self.period_filters(request))
-
-        @app.get("/api/reports/fund-boundaries")
-        def fund_boundaries(
-            request: Request,
-            start: str = None,
-            end: str = None,
-            group_id: int = None,
-            account_id: int = None,
-        ):
-            return self.fund_boundaries.analyze(self.period_filters(request))
-
-        @app.get("/api/reports/expenses")
-        def expense_analysis(
-            request: Request,
-            large_amount: str = None,
-            group_id: int = None,
-            account_id: int = None,
-            category_id: int = None,
-            excluded_account_ids: str = None,
-            exact_category: bool = False,
-            direct_group: bool = False,
-        ):
-            return self.expenses.analyze(self.period_filters(request), large_amount)
-
-        @app.get("/api/reports/income")
-        def income_analysis(
-            request: Request,
-            grain: str = "day",
-            level: int = 1,
-            large_amount: str = None,
-            group_id: int = None,
-            account_id: int = None,
-            category_id: int = None,
-            direct_group: bool = False,
-            excluded_account_ids: str = None,
-        ):
-            return self.incomes.analyze(
-                self.period_filters(request), grain, level, large_amount
-            )
-
-        @app.get("/api/reports/overview")
-        def overview(request: Request, as_of: str = None):
-            filters = self.period_filters(request)
-            filters.pop("as_of", None)
-            return self.overview.snapshot(as_of, filters)
-
-        @app.get("/api/reports/overview/details")
-        def overview_details(
-            request: Request,
-            section: str,
-            as_of: str = None,
-            day: str = None,
-            cumulative: bool = False,
-            group_id: int = None,
-        ):
-            return self.overview.details(
-                section, as_of, day, cumulative, group_id, self.period_filters(request)
-            )
-
-        @app.post("/api/transactions")
-        def post(data: dict):
-            return self.transactions.post(data)
-
-        @app.post("/api/transactions/{key}/reverse")
-        def reverse(key: int):
-            return self.transactions.reverse(key)
-
-        @app.post("/api/transactions/{key}/replace")
-        def replace(key: int, data: dict):
-            return self.transactions.replace(key, data)
-
-        @app.get("/api/reports/summary")
-        def summary(request: Request):
-            return self.reports.summary(self.period_filters(request))
-
-        @app.get("/api/reports/saved")
-        def saved():
-            return self.reports.saved()
-
-        @app.post("/api/reports/saved")
-        def save(data: dict):
-            return self.reports.save(data)
-
-        @app.get("/api/integrity")
-        def integrity():
-            return self.reports.integrity()
-
-        @app.get("/api/imports")
-        def imports():
-            return self.imports.batches()
-
-        @app.post("/api/imports")
-        async def upload(file: UploadFile = File(...), start_at: str = None):
-            content = await file.read(10 * 1024 * 1024 + 1)
-            if len(content) > 10 * 1024 * 1024:
-                raise DomainError("文件不能超过 10 MB")
-            return self.workflow.stage(
-                content, Path(file.filename or "账单.csv").name, start_at=start_at
-            )
-
-        @app.get("/api/import-runs/{key}/refund-candidates")
-        def refund_candidates(key: int):
-            return Response(
-                json.dumps(
-                    self.refunds.candidates(key), ensure_ascii=False, indent=2
-                ).encode(),
-                media_type="application/json",
-                headers={
-                    "Content-Disposition": "attachment; filename=refund-candidates.json"
-                },
-            )
-
-        @app.post("/api/import-runs/{key}/refund-matches")
-        async def match_refunds(key: int, file: UploadFile = File(...)):
-            content = await file.read(10 * 1024 * 1024 + 1)
-            if len(content) > 10 * 1024 * 1024:
-                raise DomainError("文件不能超过 10 MB")
-            return self.refunds.apply(
-                key, content, Path(file.filename or "AI退款匹配结果.json").name
-            )
-
-        @app.get("/api/imports/{key}/rows")
-        def rows(key: int):
-            return self.imports.rows(key)
-
-        @app.put("/api/import-rows/{key}")
-        def decide(key: int, data: dict):
-            return self.imports.decide(key, data)
-
-        @app.post("/api/imports/{key}/commit")
-        def commit(key: int):
-            from .models import Bill, ImportRow
-
-            with self.db.read() as s:
-                if any(
-                    s.get(Bill, row.source_key) is None
-                    for row in s.query(ImportRow).filter_by(batch_id=key)
-                ):
-                    raise DomainError("请先完成统一账单分类并导入明细，再核对特殊记录")
-            return self.imports.commit(key)
-
-        @app.post("/api/bills/reverse")
-        def reverse_bill(data: dict):
-            return self.posting.reverse(data.get("bill_id"))
-
-        @app.post("/api/bills/resolve")
-        def resolve_bill(data: dict):
-            return self.posting.resolve(data.get("bill_id"), data)
-
-        @app.post("/api/import-runs/{key}/cancel")
-        def cancel_run(key: int):
-            return self.workflow.cancel(key)
-
-        @app.get("/api/bills")
-        def bills(request: Request):
-            return self.bills.list(self.period_filters(request))
-
-        @app.get("/api/bills/export")
-        def export_bills(request: Request):
-            doc = self.bills.export(self.period_filters(request))
-            return Response(
-                doc.model_dump_json(indent=2),
-                media_type="application/json",
-                headers={
-                    "Content-Disposition": 'attachment; filename="unified-bills.json"'
-                },
-            )
-
-        @app.get("/api/import-runs")
-        def import_runs():
-            return self.workflow.list()
-
-        @app.get("/api/import-runs/{key}")
-        def import_run(key: int):
-            return self.workflow.detail(key)
-
-        @app.get("/api/import-artifacts/{key}")
-        def artifact(key: int):
-            filename, content = self.workflow.download(key)
-            return Response(
-                content,
-                media_type="application/octet-stream",
-                headers={
-                    "Content-Disposition": "attachment; filename*=UTF-8''"
-                    + quote(filename),
-                    "X-Content-Type-Options": "nosniff",
-                },
-            )
-
-        @app.post("/api/import-runs/{key}/classifications")
-        async def classify_run(key: int, file: UploadFile = File(...)):
-            content = await file.read(10 * 1024 * 1024 + 1)
-            if len(content) > 10 * 1024 * 1024:
-                raise DomainError("分类文件不能超过 10 MB")
-            return self.workflow.classify(
-                key, content, Path(file.filename or "AI分类账单.json").name
-            )
-
-        @app.post("/api/import-runs/{key}/original")
-        async def attach_original(key: int, file: UploadFile = File(...)):
-            content = await file.read(10 * 1024 * 1024 + 1)
-            if len(content) > 10 * 1024 * 1024:
-                raise DomainError("文件不能超过 10 MB")
-            return self.workflow.attach_legacy_original(
-                key, content, Path(file.filename or "原账单.csv").name
-            )
-
-        @app.post("/api/import-runs/{key}/commit")
-        def publish_run(key: int):
-            return self.workflow.commit(key)
-
-        @app.post("/api/bills/import")
-        def import_bills():
-            raise DomainError("请在账单导入页选择批次，保存分类文件后再导入交易明细")
-
-        @app.post("/api/bills/classifications")
-        def save_classifications(data: dict):
-            return self.bills.save(BillDocument.read(json.dumps(data)))
-
-        @app.get("/api/bills/history")
-        def bill_history(bill_id: str):
-            return self.bills.history(bill_id)
-
-        @app.get("/api/backup")
-        def backup():
-            fd, path = tempfile.mkstemp(suffix=".sqlite3")
-            os.close(fd)
-            self.db.backup(path)
-            return FileResponse(
-                path,
-                filename="有数备份-"
-                + Clock.now().replace(":", "-").replace(" ", "_")
-                + ".sqlite3",
-                background=BackgroundTask(lambda: os.unlink(path)),
-            )
-
-        @app.get("/api/data-backup")
-        def download_business_backup():
-            return business_backup_response("")
-
-        def business_backup_response(password, recovery_filename=None):
-            content = self.data_backup.download(password, recovery_filename)
-            filename = (
-                "有数账本-"
-                + Clock.now().replace(":", "-").replace(" ", "_")
-                + ".ledger.zip"
-            )
-            if recovery_filename is not None:
-                filename = recovery_filename
-            return Response(
-                content,
-                media_type="application/zip",
-                headers={
-                    "Content-Disposition": "attachment; filename*=UTF-8''"
-                    + quote(filename)
-                },
-            )
-
-        @app.post("/api/data-backup")
-        def download_protected_backup(data: dict):
-            return business_backup_response(data.get("password", ""))
-
-        @app.post("/api/data-backup/validate")
-        async def validate_business_backup(
-            file: UploadFile = File(...), password: str = Form(default="")
-        ):
-            try:
-                content = await file.read(BackupRecords.MAX_UPLOAD + 1)
-                return await run_in_threadpool(
-                    self.data_backup.prepare,
-                    content,
-                    file.filename or "账本备份.ledger.zip",
-                    password,
-                )
-            finally:
-                await file.close()
-
-        @app.post("/api/data-backup/restore")
-        def restore_business_backup(data: dict):
-            return self.data_backup.restore(data.get("token"), data.get("confirmation"))
-
-        @app.delete("/api/data-backup/validation/{token}")
-        def discard_business_backup(token: str):
-            return self.data_backup.discard(token)
-
-        @app.get("/api/data-backup/recovery/{filename}")
-        def recovery_business_backup(filename: str):
-            return FileResponse(
-                self.data_backup.recovery(filename),
-                filename=filename,
-                media_type="application/zip",
-            )
-
-        @app.post("/api/data-backup/recovery/{filename}")
-        def download_protected_recovery(filename: str, data: dict):
-            return business_backup_response(data.get("password", ""), filename)
-
-        @app.get("/api/export")
-        def export(request: Request):
-            rows = self.reports.list(self.period_filters(request))
-            output = io.StringIO()
-            w = csv.writer(output)
-            w.writerow(
-                [
-                    "编号",
-                    "时间",
-                    "类型",
-                    "金额（元）",
-                    "交易对方",
-                    "账户",
-                    "分类",
-                    "标签",
-                    "备注",
-                    "来源",
-                ]
-            )
-
-            def safe(v):
-                v = str(v)
-                return "'" + v if v.lstrip().startswith(("=", "+", "-", "@")) else v
-
-            labels = {
-                "EXPENSE": "支出",
-                "INCOME": "收入",
-                "TRANSFER": "转账",
-                "REFUND": "退款",
-                "OPENING": "期初",
-            }
-            for r in rows:
-                w.writerow(
-                    [
-                        r["id"],
-                        r["occurred_at"],
-                        labels.get(r["kind"], r["kind"]),
-                        format(r["amount"] / 100, ".2f"),
-                        safe(r["counterparty"]),
-                        safe(
-                            "、".join(
-                                e["account"]
-                                for e in r["entries"]
-                                if e["role"] != "SYSTEM"
-                            )
-                        ),
-                        safe(
-                            "、".join(
-                                e["category"] for e in r["entries"] if e["category"]
-                            )
-                        ),
-                        safe("、".join(r["tags"])),
-                        safe(r["note"]),
-                        r["source"],
-                    ]
-                )
-            return Response(
-                ("\ufeff" + output.getvalue()).encode("utf-8"),
-                media_type="text/csv",
-                headers={"Content-Disposition": 'attachment; filename="ledger.csv"'},
-            )
+        for routes in (accounts, catalog, reports, imports, backup):
+            routes.register(self)
 
         dist = ROOT / "frontend" / "dist"
         if dist.exists():

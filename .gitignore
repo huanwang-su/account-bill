@@ -12,7 +12,7 @@ __pycache__/
 # Keep local databases, raw imports, exports and temporary data out of Git.
 data/*
 !data/.gitkeep
-# Backup archives are committed only on the wh branch.
+# Backup archives are stored in the separate backup-wh repository.
 /backups/
 exports/
 uploads/

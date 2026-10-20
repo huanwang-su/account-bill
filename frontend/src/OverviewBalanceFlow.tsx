@@ -1,6 +1,6 @@
 import React from "react";
 import { Button, Card, Empty } from "antd";
-import { MoneyFormatter as Money, type Row } from "./api";
+import { DisplayMoneyFormatter as Money, type Row } from "./api";
 import { AccountDistribution } from "./AccountDistribution";
 import {
   BalanceSheetAccountTag,

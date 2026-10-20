@@ -2,11 +2,13 @@
 
 from collections import defaultdict
 
+from .report_context import consistent_read
 from .fund_flows import FundFlowService
 
 
 class FundBoundaryService:
     def __init__(self, database, fund_flows=None):
+        self.db = database
         self.fund_flows = fund_flows or FundFlowService(database)
 
     @staticmethod
@@ -199,5 +201,6 @@ class FundBoundaryService:
         )
         return result
 
+    @consistent_read
     def analyze(self, filters=None):
         return self.project(self.fund_flows.analyze(filters))

@@ -143,7 +143,7 @@ class AccountMovementService:
             return "REVERSAL"
         if transaction.kind == "OPENING":
             return "OPENING"
-        if transaction.source == "证券余额更新":
+        if transaction.purpose == "VALUATION":
             return "VALUATION"
         return (
             transaction.kind

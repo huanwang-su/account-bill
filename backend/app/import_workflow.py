@@ -1,3 +1,5 @@
+from .bill_states import BillStates
+
 """Archive -> normalize -> classify offline -> explicitly publish, with atomic deduplication."""
 
 import hashlib
@@ -120,7 +122,14 @@ class BillImportWorkflow:
                 missing_transaction_ids=sum(not r.get("order_id") for r in parsed.rows),
             )
             # Source registration is separate from publishing unified bills.
-            batch = self.imports.upload(content, filename, provider, start_at=start_at)
+            batch = self.imports.upload(
+                content,
+                filename,
+                provider,
+                start_at=start_at,
+                parsed=parsed,
+                apply_routing=False,
+            )
             batch_id, existing = batch["id"], batch["existing"]
             if errors:
                 error = f"{len(errors)} 行解析失败，请核对原文件后重新导入"
@@ -141,6 +150,12 @@ class BillImportWorkflow:
                         f"{len(observations)} 条已存在流水有后续状态、退款标记或亲属卡视角补充，保留原交易事实及新增来源说明，不重复入账"
                     )
                 for record in doc.bills:
+                    previous = s.get(Bill, record.id)
+                    if (
+                        previous
+                        and json.loads(previous.facts) != record.facts.model_dump()
+                    ):
+                        error = "已存在记录的原始事实发生冲突，请核对原账单"
                     if BillStatusService.excluded(s, record.id):
                         previous = s.get(Bill, record.id)
                         if (
@@ -226,7 +241,7 @@ class BillImportWorkflow:
                 previous = self.artifacts.add(
                     s, run_id, "CLASSIFIED", filename, content
                 )
-            run.status = "CLASSIFIED"
+            BillStates.run(run, "CLASSIFIED")
             run.error = ""
             return {
                 "run_id": run_id,
@@ -246,6 +261,27 @@ class BillImportWorkflow:
                     raise DomainError("请先保存本批次分类后的账单文件")
                 stage = "CLASSIFIED" if run.status == "CLASSIFIED" else "NORMALIZED"
                 doc = self.artifacts.document(s, run_id, stage)
+                # Routing can reverse journals; it belongs to explicit publication.
+                if run.batch_id:
+                    source_rows = [
+                        json.loads(row.data)
+                        for row in s.query(ImportRow).filter_by(batch_id=run.batch_id)
+                    ]
+                    if (
+                        json.loads(s.get(ImportBatch, run.batch_id).metadata_json).get(
+                            "parser"
+                        )
+                        == "alipay"
+                    ):
+                        selected_ids = {record.id for record in doc.bills}
+                        BillStatusService(self.db).apply_rows(
+                            s,
+                            [
+                                row
+                                for row in source_rows
+                                if row["source_key"] in selected_ids
+                            ],
+                        )
                 active = [
                     r
                     for r in doc.bills
@@ -291,7 +327,7 @@ class BillImportWorkflow:
                     "already_imported": False,
                     "internal_transfers": transfer_result["matched"],
                 }
-                run.status = "IMPORTED"
+                BillStates.run(run, "IMPORTED")
                 run.committed_at = Clock.now()
                 run.result = json.dumps(result)
                 run.error = ""
@@ -332,7 +368,7 @@ class BillImportWorkflow:
                 count += self.posting.reverse_in(s, link.bill_id)
             result = {"reversed_details": count, "cancelled_at": Clock.now()}
             run.result = json.dumps({**json.loads(run.result), "cancellation": result})
-            run.status = "CANCELLED"
+            BillStates.run(run, "CANCELLED")
             return result
 
     def download(self, artifact_id):

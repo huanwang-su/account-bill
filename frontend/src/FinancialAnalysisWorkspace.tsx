@@ -1,10 +1,15 @@
+import { TransactionSemantics } from "./TransactionSemantics";
+import { MetricCard } from "./MetricCard";
+import { AccountChoices } from "./AccountChoices";
+import { LatestRequest } from "./LatestRequest";
 import { ReportPeriodFilter } from "./ReportPeriodFilter";
 import React from "react";
+import { StatisticTone as Tone } from "./StatisticTone";
+import { AmountInput as InputNumber } from "./AmountInput";
 import {
   Button,
   Card,
   Empty,
-  InputNumber,
   Select,
   Space,
   Spin,
@@ -15,7 +20,7 @@ import {
 } from "antd";
 import {
   LedgerApi,
-  MoneyFormatter as Money,
+  DisplayMoneyFormatter as Money,
   Row,
   CategoryTree,
   AccountGroupTree,
@@ -37,7 +42,7 @@ import { AccountMovementSection } from "./AccountMovementSection";
 import { ScopeFundFlowSection } from "./ScopeFundFlowSection";
 import { ReportAccountFilters } from "./ReportAccountFilters";
 import { AnalysisDetailFocus } from "./AnalysisDetailFocus";
-import { HouseholdAnalysisReadout as Readout } from "./HouseholdAnalysisReadout";
+import { ReportMetrics as Readout } from "./ReportMetrics";
 
 interface Props {
   accounts: Row[];
@@ -67,7 +72,7 @@ export class FinancialAnalysisWorkspace extends React.Component<Props, State> {
   detailFocus = new AnalysisDetailFocus();
   fundFlowRef = React.createRef<ScopeFundFlowSection>();
   movementRef = React.createRef<AccountMovementSection>();
-  requestVersion = 0;
+  loader = new LatestRequest(this.api);
   state: State = {
     filters: ReportPeriodFilter.defaults(),
     grain: "day",
@@ -82,7 +87,7 @@ export class FinancialAnalysisWorkspace extends React.Component<Props, State> {
     if (previous.refreshKey !== this.props.refreshKey) this.load();
   }
   componentWillUnmount() {
-    this.requestVersion++;
+    this.loader.dispose();
     this.cancelDetailReveal();
   }
   cancelDetailReveal() {
@@ -96,7 +101,7 @@ export class FinancialAnalysisWorkspace extends React.Component<Props, State> {
   }
   async load(reveal = false) {
     if (!reveal) this.cancelDetailReveal();
-    const version = ++this.requestVersion;
+    const version = this.loader.begin();
     this.setState({ loading: true });
     try {
       const report = await this.api.request(
@@ -109,12 +114,12 @@ export class FinancialAnalysisWorkspace extends React.Component<Props, State> {
             large_expense_amount: this.state.expenseThreshold,
           }),
       );
-      if (version === this.requestVersion)
+      if (this.loader.current(version))
         this.setState({ report, loading: false }, () => {
           if (reveal) this.detailFocus.afterRender();
         });
     } catch (error) {
-      if (version === this.requestVersion) {
+      if (this.loader.current(version)) {
         this.detailFocus.cancel();
         this.setState({ loading: false });
         message.error(
@@ -318,7 +323,7 @@ export class FinancialAnalysisWorkspace extends React.Component<Props, State> {
                     <span className="muted">未记录账户</span>
                   )}
                   <small className="muted">
-                    {r.source === "证券余额更新"
+                    {TransactionSemantics.isValuation(r)
                       ? "估值记账账户"
                       : r.kind === "REFUND"
                         ? "退款到账"
@@ -492,28 +497,37 @@ export class FinancialAnalysisWorkspace extends React.Component<Props, State> {
   renderMetrics(report: Row) {
     return (
       <div className="metrics analysis-metrics">
-        <div className="metric">
+        <MetricCard
+          className="metric"
+          data-tone={Tone.of(report.income, "income")}
+        >
           <span>收入</span>
           <strong className="income" data-testid="analysis-income">
             ¥ {Money.format(report.income)}
           </strong>
           <small>{report.income_count} 笔收入</small>
-        </div>
-        <div className="metric">
+        </MetricCard>
+        <MetricCard
+          className="metric"
+          data-tone={Tone.of(report.expense, "expense")}
+        >
           <span>支出</span>
           <strong data-testid="analysis-expense">
             ¥ {Money.format(report.expense)}
           </strong>
           <small>{report.expense_count} 笔支出 · 已扣除退款冲减</small>
-        </div>
-        <div className="metric featured">
+        </MetricCard>
+        <MetricCard
+          className="metric featured"
+          data-tone={Tone.of(report.net, "net")}
+        >
           <span>净收支</span>
           <strong data-testid="analysis-net">
             ¥ {Money.format(report.net)}
           </strong>
           <small>收入 − 支出</small>
-        </div>
-        <div className="metric">
+        </MetricCard>
+        <MetricCard className="metric">
           <span>大额交易</span>
           <strong data-testid="analysis-large-count">
             {report.large_count} <small>笔</small>
@@ -522,7 +536,7 @@ export class FinancialAnalysisWorkspace extends React.Component<Props, State> {
             占收支及退款笔数{" "}
             {Readout.percentage(report.large_count, report.count) || "—"}
           </small>
-        </div>
+        </MetricCard>
       </div>
     );
   }
@@ -915,7 +929,7 @@ export class FinancialAnalysisWorkspace extends React.Component<Props, State> {
                   placeholder="全部资金账户"
                   style={{ width: 190 }}
                   value={filters.account_id}
-                  options={this.props.accounts
+                  options={AccountChoices.rank(this.props.accounts)
                     .filter(
                       (a) =>
                         !a.merged_into_id &&

@@ -1,6 +1,6 @@
 import React from "react";
 import { Button, Card, Drawer, Empty, Spin, Tag } from "antd";
-import { MoneyFormatter as Money, type Row } from "./api";
+import { DisplayMoneyFormatter as Money, type Row } from "./api";
 import { Chart } from "./Chart";
 import { PagedTable } from "./PagedTable";
 import { ReportDetailReading } from "./ReportDetailReading";

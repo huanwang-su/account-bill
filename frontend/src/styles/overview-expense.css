@@ -1,0 +1,368 @@
+/* Desktop household spending and a compact, unfiltered family dashboard. */
+.spending-insights {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 18px;
+  margin-bottom: 24px;
+}
+.spending-insights > div {
+  background: var(--surface-muted);
+  border-radius: 12px;
+  padding: 20px 22px;
+}
+.spending-insights span {
+  display: block;
+  color: var(--muted);
+  font-size: 12px;
+}
+.spending-insights strong {
+  display: block;
+  margin: 12px 0;
+  font-size: 18px;
+  font-weight: 550;
+}
+.spending-insights p {
+  margin: 0;
+  font-size: 12px;
+  color: var(--muted);
+  line-height: 1.8;
+}
+.spending-plan-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 310px;
+  gap: 24px;
+  align-items: start;
+}
+.spending-plan h3 {
+  margin: 14px 0 24px;
+  font-size: 24px;
+}
+.spending-plan > .ant-card-body > strong {
+  display: block;
+  color: var(--primary);
+  font-size: 32px;
+  margin: 14px 0 22px;
+}
+.spending-plan p {
+  line-height: 1.8;
+  font-size: 12px;
+}
+.family-overview {
+  display: grid;
+  gap: 22px;
+}
+.overview-period {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.overview-period strong {
+  font-size: 17px;
+  font-weight: 550;
+}
+.overview-period span {
+  color: var(--muted);
+  margin-left: 20px;
+  font-size: 12px;
+}
+.overview-hero {
+  display: grid;
+  grid-template-columns: 1.1fr 1fr;
+  background: var(--hero-bg);
+  color: var(--on-accent);
+  border-radius: 16px;
+  padding: 32px 36px;
+  gap: 32px;
+}
+.overview-networth > span {
+  color: var(--hero-muted);
+  font-size: 13px;
+}
+.overview-networth > strong {
+  display: block;
+  font-size: 40px;
+  font-weight: 550;
+  letter-spacing: -1px;
+  margin: 20px 0 16px;
+  font-variant-numeric: tabular-nums;
+}
+.overview-networth p {
+  color: var(--hero-muted);
+  font-size: 12px;
+  margin: 0 0 12px;
+  line-height: 1.8;
+}
+.overview-networth .ant-btn {
+  color: var(--hero-muted);
+  padding: 0;
+}
+.overview-positions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 28px;
+  padding: 4px 0 4px 30px;
+  border-left: 1px solid #ffffff22;
+}
+.overview-positions span {
+  color: var(--hero-muted);
+  font-size: 12px;
+  display: block;
+  margin-bottom: 12px;
+}
+.overview-positions strong {
+  font-size: 22px;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.overview-positions small {
+  font-size: 12px;
+  color: var(--hero-muted);
+}
+.overview-cashflow {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 22px;
+}
+.overview-cashflow .ant-card-body > span {
+  color: var(--muted);
+  display: block;
+  font-size: 12px;
+}
+.overview-cashflow strong {
+  display: block;
+  margin: 18px 0 12px;
+  font-size: 27px;
+  font-weight: 550;
+  font-variant-numeric: tabular-nums;
+}
+.overview-cashflow small {
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.6;
+}
+.overview-main-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr);
+  gap: 22px;
+  align-items: stretch;
+}
+.overview-main-grid > .ant-card {
+  min-width: 0;
+}
+.overview-main-grid .ant-table-cell {
+  font-size: 13px;
+  white-space: nowrap;
+}
+.overview-main-grid .ant-table-wrapper {
+  overflow-x: auto;
+}
+.overview-trend-summary {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  color: var(--muted);
+  font-size: 12px;
+  border-top: 1px solid var(--border);
+  padding-top: 16px;
+}
+.overview-attention button {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  text-align: left;
+  gap: 16px;
+  background: none;
+  border: 0;
+  border-bottom: 1px solid var(--border);
+  width: 100%;
+  cursor: pointer;
+  padding: 8px 0 18px;
+  margin-bottom: 16px;
+  color: inherit;
+  font: inherit;
+}
+.overview-attention button:hover {
+  color: var(--primary);
+}
+.overview-attention strong {
+  font-size: 21px;
+  font-weight: 550;
+  display: block;
+  margin-bottom: 8px;
+}
+.overview-attention span,
+.overview-attention p {
+  font-size: 12px;
+  color: var(--muted);
+}
+.overview-attention p {
+  margin-bottom: 0;
+  line-height: 1.7;
+}
+.overview-card-footnote {
+  color: var(--muted);
+  margin: 18px 0 0;
+  font-size: 11px;
+  line-height: 1.8;
+}
+.overview-card-guide {
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.8;
+  margin: 0 0 14px;
+}
+.overview-group-chart {
+  max-height: 380px;
+  overflow-y: auto;
+  scrollbar-width: thin;
+}
+.overview-group-details {
+  margin-top: 14px;
+  border-top: 1px solid var(--border);
+  padding-top: 12px;
+}
+.overview-group-details > summary {
+  font-size: 12px;
+  color: var(--primary);
+  cursor: pointer;
+  margin-bottom: 10px;
+}
+.overview-group-details > summary:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 3px;
+}
+.overview-investment-facts {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 16px;
+  margin-top: 24px;
+  border-top: 1px solid var(--border);
+  padding-top: 18px;
+}
+.overview-investment-facts span,
+.overview-investment-facts small {
+  display: block;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.8;
+}
+.overview-investment-facts strong {
+  display: block;
+  margin: 5px 0;
+  font-size: 21px;
+  font-weight: 550;
+  font-variant-numeric: tabular-nums;
+}
+.overview-investment-facts .overview-valuation-date {
+  font-size: 16px;
+}
+.overview-investment > span {
+  color: var(--muted);
+  font-size: 12px;
+}
+.overview-investment > strong {
+  display: block;
+  margin: 12px 0 8px;
+  font-size: 28px;
+  font-weight: 550;
+}
+.overview-investment > small {
+  color: var(--muted);
+  font-size: 11px;
+}
+.overview-category-preview {
+  border-top: 1px solid var(--border);
+  margin-top: 22px;
+  padding-top: 18px;
+  font-size: 12px;
+}
+.overview-category-preview > div {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 14px;
+  gap: 16px;
+}
+.overview-category-preview strong {
+  font-weight: 500;
+}
+.overview-activity button {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  text-align: left;
+  border: 0;
+  border-bottom: 1px solid var(--border);
+  padding: 16px 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+  gap: 20px;
+}
+.overview-activity button:hover {
+  background: var(--surface-muted);
+}
+.overview-activity strong {
+  font-weight: 500;
+  font-size: 13px;
+}
+.overview-activity small {
+  display: block;
+  color: var(--muted);
+  font-size: 11px;
+  margin-top: 7px;
+}
+.overview-activity button > span {
+  font-size: 17px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.overview-data-status {
+  display: flex;
+  justify-content: space-between;
+  gap: 20px;
+  font-size: 11px;
+  color: var(--muted);
+  padding-top: 18px;
+}
+.analysis-account-exclusions {
+  background: var(--surface-muted);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 14px 18px 8px;
+}
+.analysis-account-exclusions p {
+  margin: 8px 0;
+  font-size: 12px;
+}
+.analysis-config-fields {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 24px;
+  margin-top: 20px;
+}
+.analysis-config-fields label {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.single-account-movements {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 22px;
+}
+.single-account-movements span,
+.single-account-movements strong {
+  display: block;
+}
+.single-account-movements span {
+  color: var(--muted);
+  margin-bottom: 8px;
+}
+.single-account-movements strong {
+  font-size: 21px;
+  font-weight: 600;
+}

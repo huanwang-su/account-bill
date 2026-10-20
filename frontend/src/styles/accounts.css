@@ -1,0 +1,583 @@
+/* Desktop account management: group directory and compact account register. */
+.account-desktop {
+  min-width: 0;
+}
+main[data-page="accounts"] .workspace-header {
+  min-height: 94px;
+  padding-block: 20px 18px;
+}
+main[data-page="accounts"] .workspace-heading h1 {
+  font-size: 24px;
+}
+.account-directory-layout {
+  display: grid;
+  grid-template-columns: 236px minmax(0, 1fr);
+  align-items: start;
+  gap: 20px;
+}
+.account-group-navigation {
+  position: sticky;
+  top: 20px;
+  padding: 14px 12px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  border-radius: 12px;
+  min-width: 0;
+}
+.account-navigation-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  padding: 0 4px 12px;
+}
+.account-navigation-header > .ant-btn {
+  padding-inline: 5px;
+  font-size: 12px;
+  color: var(--muted);
+}
+.account-navigation-title {
+  color: var(--text);
+  font-weight: 600;
+  font-size: 13px;
+  white-space: nowrap;
+}
+.account-navigation-title .anticon {
+  margin-right: 5px;
+  color: var(--muted);
+}
+.account-group-navigation .ant-tree {
+  background: transparent;
+  font-size: 13px;
+  padding: 8px 0;
+  margin-block: 7px;
+  border-top: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+  max-height: calc(100vh - 370px);
+  min-height: 100px;
+  overflow: auto;
+  scrollbar-width: thin;
+}
+.account-group-navigation .ant-tree-indent-unit {
+  width: 18px;
+}
+.account-group-navigation .ant-tree-switcher {
+  width: 22px;
+  flex: 0 0 22px;
+}
+.account-group-navigation .ant-tree-treenode {
+  padding: 2px 0;
+  border-radius: 7px;
+}
+.account-group-navigation .ant-tree-node-content-wrapper {
+  min-width: 0;
+  flex: 1;
+  padding: 3px 8px !important;
+  border-radius: 7px;
+}
+.account-group-navigation .ant-tree-title {
+  display: block;
+  min-width: 0;
+}
+.account-group-navigation .ant-tree-treenode:has(.ant-tree-node-selected) {
+  background: var(--surface-muted);
+  box-shadow: inset 3px 0 var(--primary);
+}
+.account-group-navigation .ant-tree-title > span {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+.account-group-navigation .ant-tree-title > span > span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.account-group-navigation .ant-tree-title small {
+  margin-left: auto;
+  min-width: 15px;
+  color: var(--muted);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+.account-group-navigation .ant-tree-node-selected {
+  color: var(--primary) !important;
+  background: transparent !important;
+  font-weight: 600;
+}
+.group-tree-hint {
+  margin: 12px 4px 0;
+  padding: 12px 0 0;
+  border-top: 1px solid var(--border);
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.7;
+}
+.account-group-shortcut {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  width: 100%;
+  padding: 8px 12px;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--text);
+  text-align: left;
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+  transition:
+    background-color 160ms ease,
+    color 160ms ease;
+}
+.account-group-shortcut-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.account-group-shortcut:hover,
+.account-group-shortcut[aria-pressed="true"] {
+  background: var(--surface-muted);
+}
+.account-group-shortcut[aria-pressed="true"] {
+  color: var(--primary);
+  font-weight: 600;
+  box-shadow: inset 3px 0 var(--primary);
+}
+.account-group-shortcut:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+}
+.account-group-count {
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  color: var(--muted);
+}
+.account-directory-content {
+  min-width: 0;
+}
+.account-scope-summary {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 24px;
+  padding: 18px 22px;
+  margin-bottom: 16px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface);
+}
+.account-breadcrumb {
+  font-size: 11px;
+  color: var(--muted);
+  line-height: 1.6;
+  margin: 0 0 4px;
+  overflow-wrap: anywhere;
+}
+.account-scope-title h2 {
+  font-size: 21px;
+  font-weight: 600;
+  margin: 0 0 5px;
+  letter-spacing: -0.4px;
+  overflow-wrap: anywhere;
+}
+.account-scope-title > span {
+  font-size: 12px;
+  color: var(--muted);
+}
+.account-scope-balance {
+  min-width: 190px;
+  padding-left: 24px;
+  border-left: 1px solid var(--border);
+}
+.account-scope-balance > span {
+  display: block;
+  color: var(--muted);
+  font-size: 11px;
+}
+.account-scope-balance small {
+  font-size: 10px;
+  margin-left: 4px;
+  color: var(--muted);
+}
+.account-scope-balance strong {
+  display: block;
+  color: var(--primary);
+  font-size: clamp(22px, 1.8vw, 28px);
+  font-weight: 600;
+  letter-spacing: -0.6px;
+  font-variant-numeric: tabular-nums;
+  margin: 5px 0 3px;
+  white-space: nowrap;
+}
+.account-scope-balance > .account-scope-footnote {
+  font-size: 11px;
+  color: var(--muted);
+}
+.account-scope-actions {
+  display: flex;
+  justify-content: flex-end;
+}
+.account-scope-actions > .ant-btn {
+  height: 36px;
+  padding-inline: 14px;
+}
+.account-opening-notice {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: -3px 2px 14px;
+  color: var(--muted);
+  font-size: 12px;
+}
+.account-opening-notice > span {
+  width: 5px;
+  height: 5px;
+  background: #b8a879;
+  border-radius: 50%;
+}
+.account-list-panel {
+  min-width: 0;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  border-radius: 12px;
+  overflow: hidden;
+}
+.account-list-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 12px 20px;
+}
+.account-list-toolbar strong {
+  font-size: 14px;
+  font-weight: 600;
+}
+.account-list-toolbar > div > span {
+  font-size: 12px;
+  color: var(--muted);
+  margin-left: 12px;
+}
+.account-list-toolbar .ant-input-affix-wrapper {
+  width: 260px;
+  background: var(--surface);
+  border-color: var(--border);
+  font-size: 12px;
+}
+.account-list-toolbar .ant-input-prefix {
+  color: var(--muted);
+  margin-right: 8px;
+}
+.account-list-columns,
+.account-list-row {
+  display: grid;
+  grid-template-columns: minmax(220px, 1fr) minmax(132px, 160px) 84px 116px;
+  align-items: center;
+  gap: 14px;
+  padding-left: 20px;
+  padding-right: 20px;
+}
+.account-list-columns {
+  background: var(--surface-muted);
+  border-top: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+  padding-top: 12px;
+  padding-bottom: 12px;
+  color: var(--muted);
+  font-size: 12px;
+}
+.account-list-columns > span:nth-child(2) {
+  text-align: right;
+}
+.account-list-columns > span:nth-child(3) {
+  text-align: center;
+}
+.account-list-columns > span:last-child {
+  text-align: right;
+  padding-right: 10px;
+}
+.account-list-group-heading {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 20px;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+}
+.account-list-group-heading > div:first-child {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+.account-list-group-heading .anticon {
+  font-size: 13px;
+  color: var(--muted);
+}
+.account-list-group-heading h3 {
+  margin: 0;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.account-list-group-heading > div > span {
+  font-size: 11px;
+  color: var(--muted);
+  white-space: nowrap;
+}
+.group-section-actions {
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+}
+.group-section-actions .ant-btn {
+  font-size: 11px;
+  padding: 0 5px;
+  color: var(--muted);
+}
+.account-list-row {
+  padding-top: 12px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--border);
+  transition: background 0.15s;
+}
+.account-list-row:hover {
+  background: var(--surface-muted);
+}
+.account-list-identity {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  min-width: 0;
+}
+.account-provider-icon {
+  width: 36px;
+  height: 36px;
+  flex-shrink: 0;
+  display: grid;
+  place-items: center;
+  font-size: 17px;
+  border-radius: 9px;
+  background: var(--surface-muted);
+  color: var(--primary);
+}
+.account-provider-icon.bank {
+  background: var(--surface-muted);
+  color: var(--primary);
+}
+.account-provider-icon.alipay {
+  background: var(--surface-muted);
+  color: var(--primary);
+}
+.account-provider-icon.wechat {
+  background: var(--surface-muted);
+  color: var(--primary);
+}
+.account-list-identity > div {
+  min-width: 0;
+}
+.account-list-name {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  min-width: 0;
+}
+.account-list-name > span {
+  font-size: 14px;
+  font-weight: 550;
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+}
+.account-list-name .ant-tag {
+  font-size: 10px;
+  line-height: 16px;
+  margin: 0;
+}
+.account-list-identity p {
+  margin: 5px 0 0;
+  font-size: 12px;
+  color: var(--muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.account-list-type {
+  font-size: 12px;
+  color: var(--muted);
+}
+.account-list-metadata {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 4px 10px;
+  margin-top: 4px;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.6;
+}
+.account-list-tags {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 4px 6px;
+  color: var(--muted);
+  font-size: 11px;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+.account-list-tags > span + span::before {
+  content: "·";
+  margin-right: 6px;
+}
+.account-list-identity p.account-list-note {
+  color: var(--muted);
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+.account-list-type small {
+  display: block;
+  font-size: 10px;
+  color: var(--muted);
+  margin-top: 5px;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.account-list-amount {
+  text-align: right;
+  font-size: 18px;
+  font-weight: 550;
+  font-variant-numeric: tabular-nums;
+  color: var(--text);
+  white-space: nowrap;
+}
+.account-list-amount small {
+  display: block;
+  font-size: 10px;
+  font-weight: 400;
+  color: var(--muted);
+  margin-top: 4px;
+}
+.account-list-opening {
+  text-align: center;
+  font-size: 12px;
+}
+.account-opening-action.ant-btn {
+  height: auto;
+  padding: 3px 5px;
+  font-size: 12px;
+}
+.opening-pending {
+  color: var(--muted);
+  padding: 3px 6px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--surface-muted);
+}
+.opening-ready {
+  color: var(--muted);
+}
+.account-list-actions {
+  display: flex;
+  align-items: center;
+  justify-content: end;
+  white-space: nowrap;
+}
+.account-list-actions .ant-btn {
+  font-size: 12px;
+  padding: 0 5px;
+}
+.account-list-actions .ant-btn-text {
+  color: var(--muted);
+}
+.account-list-actions .ant-btn-link {
+  color: var(--muted);
+}
+.account-list-actions .ant-btn-link:hover {
+  color: var(--primary);
+}
+.account-group-empty {
+  padding: 8px 0;
+}
+.account-list-footer {
+  padding: 13px 20px;
+  font-size: 11px;
+  color: var(--muted);
+  background: var(--surface);
+}
+.account-system-details {
+  margin-top: 14px;
+}
+.account-system-details .ant-collapse-header {
+  color: var(--muted) !important;
+  font-size: 11px;
+  padding-left: 0 !important;
+}
+.account-list-row.is-inactive {
+  opacity: 0.6;
+}
+@media (max-width: 1350px) {
+  .account-directory-layout {
+    grid-template-columns: 212px minmax(0, 1fr);
+    gap: 18px;
+  }
+  .account-scope-summary {
+    padding: 16px 18px;
+    gap: 18px;
+  }
+  .account-scope-balance {
+    min-width: 170px;
+    padding-left: 18px;
+  }
+}
+
+.catalog-trees {
+  align-items: start;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+.catalog-trees .ant-tree {
+  background: transparent;
+}
+.catalog-trees .ant-tree-node-content-wrapper {
+  min-width: 0;
+  padding: 2px 6px !important;
+}
+.catalog-node {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  font-size: 14px;
+}
+.catalog-node > span:first-child {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.catalog-node-meta {
+  margin-left: auto;
+}
+.catalog-node-meta .ant-tag {
+  font-size: 10px;
+  margin: 0;
+  line-height: 18px;
+}
+.catalog-node .ant-btn {
+  font-size: 12px;
+  padding: 0 5px;
+  color: var(--muted);
+}
+.catalog-trees .ant-tree-title {
+  display: block;
+}
+.catalog-trees .ant-card-body > .ant-tree {
+  max-height: 760px;
+  overflow-y: auto;
+}

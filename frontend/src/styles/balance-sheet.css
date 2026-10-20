@@ -1,0 +1,239 @@
+/* Financial position uses a wide, readable desktop statement layout. */
+.bill-sort-controls {
+  margin-bottom: 18px;
+}
+.balance-sheet-metrics {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 20px;
+  margin-bottom: 24px;
+}
+.balance-sheet-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 24px;
+  align-items: start;
+}
+.balance-sheet-distributions {
+  display: grid;
+  gap: 24px;
+  margin-bottom: 28px;
+}
+.balance-flow-card {
+  min-width: 0;
+}
+.balance-flow-hint,
+.balance-flow-footnote {
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.8;
+  margin: 0 0 16px;
+}
+.balance-flow-footnote {
+  margin: 14px 0 0;
+}
+.balance-flow-scroll {
+  overflow: auto;
+  max-height: 780px;
+  scrollbar-width: thin;
+}
+.balance-flow-canvas {
+  min-width: 880px;
+}
+.balance-flow-canvas-four {
+  min-width: 1180px;
+}
+.balance-flow-columns {
+  position: relative;
+  height: 30px;
+  color: var(--muted);
+  font-size: 12px;
+  border-bottom: 1px solid var(--border);
+}
+.balance-flow-columns span {
+  position: absolute;
+  top: 0;
+}
+.balance-flow-columns span:nth-child(1) {
+  left: 32px;
+}
+.balance-flow-columns span:nth-child(2) {
+  left: calc(50% - 120px);
+}
+.balance-flow-columns span:nth-child(3) {
+  left: calc(100% - 268px);
+}
+.balance-flow-adjustments {
+  padding: 14px 18px;
+  margin-top: 16px;
+  border-radius: 8px;
+  background: var(--surface-muted);
+  font-size: 12px;
+  color: var(--expense);
+}
+.balance-flow-adjustments > div {
+  display: flex;
+  justify-content: space-between;
+  gap: 20px;
+  margin-top: 8px;
+}
+.balance-flow-adjustments p {
+  margin: 12px 0 0;
+}
+.balance-sheet-grid .ant-card {
+  min-width: 0;
+}
+.balance-sheet-grid .ant-table-cell {
+  overflow-wrap: anywhere;
+}
+.balance-group-row > td {
+  background: var(--surface-muted) !important;
+  font-weight: 600;
+}
+.balance-account-note {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 8px;
+  margin-top: 6px;
+}
+.balance-negative {
+  color: var(--negative);
+}
+.balance-equation {
+  margin-top: 24px;
+  padding: 18px 24px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface-muted);
+  font-size: 16px;
+  font-weight: 600;
+}
+.balance-sheet-note {
+  margin-top: 16px;
+  line-height: 1.8;
+}
+.balance-overview-link.ant-btn {
+  display: block;
+  padding: 0;
+  margin-top: 8px;
+  color: inherit;
+}
+.report-tabs > .ant-tabs-nav {
+  margin-bottom: 26px;
+}
+.financial-analysis-tabs > .ant-tabs-nav {
+  position: sticky;
+  top: 12px;
+  z-index: 8;
+  margin-bottom: 20px;
+  padding-inline: 18px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface);
+  box-shadow: var(--shadow);
+}
+.financial-analysis-tabs > .ant-tabs-nav .ant-tabs-tab {
+  padding-block: 14px;
+  font-weight: 600;
+}
+.financial-analysis-tabs .analysis-drilldown-bar {
+  scroll-margin-top: 88px;
+}
+.analysis-intro h2,
+.analysis-category-title h2 {
+  font-size: 19px;
+  margin: 0 0 8px;
+}
+.analysis-intro p {
+  margin: 0 0 16px;
+  font-size: 13px;
+  line-height: 1.7;
+}
+.analysis-metrics {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+.analysis-category-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 24px;
+}
+.analysis-category-grid .ant-card {
+  min-width: 0;
+}
+.analysis-category-grid .ant-table-cell {
+  overflow-wrap: anywhere;
+}
+.analysis-category-grid .ant-btn-link {
+  padding-left: 0;
+  white-space: normal;
+  height: auto;
+  text-align: left;
+}
+.analysis-large-summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 18px 32px;
+  margin-bottom: 20px;
+  color: var(--muted);
+}
+.analysis-large-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 2fr) minmax(280px, 1fr);
+  gap: 24px;
+}
+.analysis-large-table {
+  min-width: 0;
+}
+.analysis-large-rank {
+  padding: 0 12px;
+  background: var(--surface-muted);
+  border-radius: 10px;
+}
+.analysis-large-rank h3 {
+  font-size: 14px;
+  padding: 12px 0 0;
+}
+.analysis-note {
+  line-height: 1.8;
+}
+.counterparty-charts {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.2fr);
+  gap: 22px;
+}
+.investment-charts {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 22px;
+}
+.investment-note {
+  line-height: 1.8;
+}
+.investment-row-note {
+  display: block;
+  color: var(--muted);
+  max-width: 280px;
+  overflow-wrap: anywhere;
+}
+.investment-workspace .ant-table-cell {
+  overflow-wrap: anywhere;
+}
+.counterparty-valuation-summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 20px;
+  margin-bottom: 20px;
+  color: var(--muted);
+}
+.counterparty-valuation-summary b {
+  display: block;
+  margin-top: 7px;
+  color: var(--primary);
+  font-size: 20px;
+}
+.counterparty-workspace .ant-table-cell {
+  overflow-wrap: anywhere;
+}
+.analysis-trend .chart {
+  height: 340px;
+}

@@ -1,39 +1,8 @@
-const assert = require("node:assert/strict");
-const fs = require("node:fs");
-const path = require("node:path");
-const Module = require("node:module");
-const ts = require("typescript");
-const cache = new Map();
-function loadTs(filename) {
-  if (cache.has(filename)) return cache.get(filename).exports;
-  const output = ts.transpileModule(fs.readFileSync(filename, "utf8"), {
-    compilerOptions: {
-      module: ts.ModuleKind.CommonJS,
-      jsx: ts.JsxEmit.ReactJSX,
-      target: ts.ScriptTarget.ES2022,
-      esModuleInterop: true,
-    },
-    fileName: filename,
-  }).outputText;
-  const mod = new Module(filename, module);
-  mod.paths = Module._nodeModulePaths(path.dirname(filename));
-  mod.require = (name) => {
-    if (name.startsWith(".")) {
-      const target = [".ts", ".tsx"]
-        .map((ext) => path.resolve(path.dirname(filename), name + ext))
-        .find((file) => fs.existsSync(file));
-      if (target) return loadTs(target);
-    }
-    return Module.createRequire(filename)(name);
-  };
-  cache.set(filename, mod);
-  mod._compile(output, filename + ".cjs");
-  return mod.exports;
-}
+const assert = require("node:assert/strict"),
+  path = require("node:path");
+const { loadTs } = require("./source-loader.cjs");
 const src = (name) => path.resolve(__dirname, "../src", name);
-const { AccountReadoutData, PartyReadoutData } = loadTs(
-  src("AccountReadoutData.ts"),
-);
+const { PartyMetrics: PartyReadoutData } = loadTs(src("ReportMetrics.ts"));
 const { SingleAccountWorkspace } = loadTs(src("SingleAccountWorkspace.tsx"));
 const { CounterpartyWorkspace } = loadTs(src("CounterpartyWorkspace.tsx"));
 const { Chart } = loadTs(src("Chart.tsx"));
@@ -78,38 +47,6 @@ const account = {
     movement(4, -100, "EXPENSE", "证券余额更新"),
   ],
 };
-const before = JSON.stringify(account);
-const bridge = new AccountReadoutData(account);
-assert.equal(bridge.reconciled, true);
-assert.equal(bridge.cashflow, 200);
-assert.equal(
-  bridge.netExpense,
-  -200,
-  "Refunds exceeding current payments remain negative, never clamped",
-);
-assert.equal(bridge.transfers, -100);
-assert.equal(bridge.leading.key, "cashflow");
-assert.deepEqual(
-  bridge.components.find((row) => row.key === "cashflow").transaction_ids,
-  [1, 2],
-);
-assert.deepEqual(
-  bridge.components.find((row) => row.key === "valuation").transaction_ids,
-  [4],
-);
-assert.equal(
-  JSON.stringify(account),
-  before,
-  "Readouts must not mutate the reconciled report",
-);
-assert.equal(
-  new AccountReadoutData({ ...account, change: 1 }).reconciled,
-  false,
-);
-assert.equal(
-  new AccountReadoutData({ ...account, adjustments: undefined }).reconciled,
-  false,
-);
 const zero = {
   ...account,
   change: 0,
@@ -123,20 +60,6 @@ const zero = {
   count: 0,
   transactions: [],
 };
-assert.equal(new AccountReadoutData(zero).leading, undefined);
-assert.equal(new AccountReadoutData(zero).reconciled, true);
-const opening = new AccountReadoutData({
-  ...zero,
-  change: 100,
-  adjustments: 100,
-  transactions: [movement(8, 100, "OPENING", "证券余额更新")],
-});
-assert.deepEqual(
-  opening.components.find((row) => row.key === "adjustments").transaction_ids,
-  [8],
-  "Opening baselines retain adjustment precedence over valuation source labels",
-);
-
 function party(name, transactions) {
   const incoming = transactions.reduce(
     (sum, row) => sum + Math.max(0, row.account_change),
@@ -175,31 +98,15 @@ const frequent = party(
   Array.from({ length: 99 }, (_, i) => movement(100 + i, i === 98 ? -2 : -1)),
 );
 const parties = [frequent, receiver, payer, dual];
-const originalOrder = parties.map((row) => row.key);
-const facts = new PartyReadoutData(parties);
+const facts = {
+  incoming: parties.reduce((s, r) => s + r.incoming, 0),
+  outgoing: parties.reduce((s, r) => s + r.outgoing, 0),
+};
+facts.net = facts.incoming - facts.outgoing;
 assert.deepEqual(
-  PartyReadoutData.rank(parties).map((row) => row.key),
+  PartyReadoutData.rank(parties).map((r) => r.key),
   [dual.key, payer.key, receiver.key, frequent.key],
 );
-assert.equal(facts.topIncoming, receiver);
-assert.equal(facts.topOutgoing, payer);
-assert.equal(facts.mostFrequent, frequent);
-assert.deepEqual(facts.twoWay, [dual]);
-assert.equal(facts.net, -30100);
-assert.equal(
-  dual.net,
-  0,
-  "Large offsetting flows must still lead the gross ranking",
-);
-assert.deepEqual(
-  parties.map((row) => row.key),
-  originalOrder,
-);
-assert.equal(PartyReadoutData.share(0, 0), "—");
-assert.equal(PartyReadoutData.share(50, 100), "50.0%");
-assert.equal(new PartyReadoutData([]).topOutgoing, undefined);
-assert.deepEqual(new PartyReadoutData([]).twoWay, []);
-
 function stateful(component) {
   component.setState = function (patch, callback) {
     Object.assign(
@@ -340,5 +247,5 @@ assert.ok(!html.includes("NaN") && !html.includes("Infinity"));
 assert.ok(!html.includes("本账户看点"));
 assert.ok(html.includes("期末账面余额") && html.includes("收支分析"));
 console.log(
-  "Account readouts passed: signed balance bridge, refund-only and zero cases, single-account readout removal, counterparty readout removal, gross ranking with large negative and zero-net flows, distinct frequency/bidirectional facts, immutable data and SSR.",
+  "Account presentation: gross ranking, stable same-name identities, linkage, privacy and SSR passed.",
 );

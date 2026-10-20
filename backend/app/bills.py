@@ -22,14 +22,12 @@ from .models import (
     BillClassificationHistory,
     ImportRow,
     ImportBatch,
-    Account,
     BillLedger,
     BillDisposition,
     Transaction,
     Entry,
     BillNetting,
     BillAssociation,
-    TransferMatch,
 )
 
 
@@ -291,6 +289,54 @@ class BillService:
                 )
         return result
 
+    def pending_count(self):
+        from sqlalchemy import or_
+
+        with self.db.read() as s:
+            excluded = s.query(BillDisposition.source_key).filter(
+                BillDisposition.status != "NORMAL"
+            )
+            return (
+                s.query(Bill)
+                .outerjoin(BillLedger, BillLedger.bill_id == Bill.id)
+                .filter(
+                    ~Bill.id.in_(excluded),
+                    or_(BillLedger.status.is_(None), BillLedger.status == "PENDING"),
+                )
+                .count()
+            )
+
+    def statistics(self):
+        from sqlalchemy import func
+
+        with self.db.read() as s:
+            excluded = s.query(BillDisposition.source_key).filter(
+                BillDisposition.status != "NORMAL"
+            )
+            query = s.query(Bill).filter(~Bill.id.in_(excluded))
+            classification = func.coalesce(
+                func.json_extract(Bill.classification, "$.status"), "UNCLASSIFIED"
+            )
+            classes = dict(
+                query.with_entities(classification, func.count(Bill.id)).group_by(
+                    classification
+                )
+            )
+            posting = func.coalesce(BillLedger.status, "PENDING")
+            states = dict(
+                query.outerjoin(BillLedger, BillLedger.bill_id == Bill.id)
+                .with_entities(posting, func.count(Bill.id))
+                .group_by(posting)
+            )
+            return dict(
+                total=sum(classes.values()),
+                classified=sum(v for k, v in classes.items() if k != "UNCLASSIFIED"),
+                review=classes.get("NEEDS_REVIEW", 0),
+                pending=states.get("PENDING", 0),
+                posted=states.get("POSTED", 0),
+                reversed=states.get("REVERSED", 0),
+            )
+
     def list(self, filters=None):
         f = filters or {}
         result = []
@@ -301,8 +347,58 @@ class BillService:
             from .category_catalog import CategoryGraph, CategoryCatalog
 
             category_graph = CategoryGraph(s)
-            entry_paths = {}
-            for entry in s.query(Entry).filter(Entry.category_id != None):
+            from sqlalchemy import func, or_
+
+            query = s.query(Bill)
+            ignored_query = s.query(BillDisposition.source_key).filter(
+                BillDisposition.status != "NORMAL"
+            )
+            query = query.filter(~Bill.id.in_(ignored_query))
+            occurred = func.substr(
+                func.json_extract(Bill.facts, "$.occurred_at"), 1, 10
+            )
+            if f.get("start"):
+                query = query.filter(occurred >= f["start"])
+            if f.get("end"):
+                query = query.filter(occurred <= f["end"])
+            if f.get("status"):
+                query = query.filter(
+                    func.coalesce(
+                        func.json_extract(Bill.classification, "$.status"),
+                        "UNCLASSIFIED",
+                    )
+                    == f["status"]
+                )
+            if f.get("ledger_status"):
+                query = query.outerjoin(
+                    BillLedger, BillLedger.bill_id == Bill.id
+                ).filter(
+                    func.coalesce(BillLedger.status, "PENDING") == f["ledger_status"]
+                )
+            candidates = query.all()
+            candidate_ids = {bill.id for bill in candidates}
+            ledgers = {
+                link.bill_id: link
+                for link in s.query(BillLedger).filter(
+                    BillLedger.bill_id.in_(candidate_ids)
+                )
+            }
+            transaction_ids = {
+                link.transaction_id for link in ledgers.values() if link.transaction_id
+            }
+            entry_paths, entry_groups = {}, {}
+            transactions = {
+                row.id: row
+                for row in s.query(Transaction).filter(
+                    Transaction.id.in_(transaction_ids)
+                )
+            }
+            for entry in s.query(Entry).filter(
+                Entry.transaction_id.in_(transaction_ids)
+            ):
+                entry_groups.setdefault(entry.transaction_id, []).append(entry)
+                if entry.category_id is None:
+                    continue
                 category = category_graph.canonical(entry.category_id)
                 path = [
                     "收入" if category.kind == "INCOME" else "支出",
@@ -324,10 +420,16 @@ class BillService:
                         ]
                     )
             sources = {}
-            ledgers = {l.bill_id: l for l in s.query(BillLedger)}
-            nettings = {n.payment_id: n for n in s.query(BillNetting)}
+            nettings = {
+                n.payment_id: n
+                for n in s.query(BillNetting).filter(
+                    BillNetting.payment_id.in_(candidate_ids)
+                )
+            }
             associations = {}
-            for relation in s.query(BillAssociation):
+            for relation in s.query(BillAssociation).filter(
+                BillAssociation.target_id.in_(candidate_ids)
+            ):
                 associations.setdefault(relation.target_id, []).append(
                     relation.source_id
                 )
@@ -340,7 +442,14 @@ class BillService:
                 if f.get("group_id")
                 else None
             )
-            for row in s.query(ImportRow).order_by(ImportRow.id):
+            source_ids = candidate_ids | {
+                key for keys in associations.values() for key in keys
+            }
+            for row in (
+                s.query(ImportRow)
+                .filter(ImportRow.source_key.in_(source_ids))
+                .order_by(ImportRow.id)
+            ):
                 sources.setdefault(
                     row.source_key,
                     {
@@ -368,7 +477,7 @@ class BillService:
                     BillDisposition.status != "NORMAL"
                 )
             }
-            for bill in s.query(Bill):
+            for bill in candidates:
                 if bill.id in ignored:
                     continue
                 facts = json.loads(bill.facts)
@@ -408,6 +517,8 @@ class BillService:
                     not in (
                         facts["counterparty"]
                         + " "
+                        + sources.get(bill.id, {}).get("source_transaction_id", "")
+                        + " "
                         + facts["description"]
                         + " "
                         + " ".join(wallet_notes)
@@ -433,22 +544,26 @@ class BillService:
                 ):
                     continue
                 tx = (
-                    s.get(Transaction, ledger.transaction_id)
+                    transactions.get(ledger.transaction_id)
                     if ledger and ledger.transaction_id
                     else None
                 )
                 financial_account = (
-                    s.query(Entry)
-                    .join(Account, Entry.account_id == Account.id)
-                    .filter(Entry.transaction_id == tx.id, Account.role != "SYSTEM")
-                    .first()
+                    next(
+                        (
+                            entry
+                            for entry in entry_groups.get(tx.id, [])
+                            if graph.accounts[entry.account_id].role != "SYSTEM"
+                        ),
+                        None,
+                    )
                     if tx
                     else None
                 )
                 effective_ids = (
                     {
                         graph.canonical(e.account_id).id
-                        for e in s.query(Entry).filter_by(transaction_id=tx.id)
+                        for e in entry_groups.get(tx.id, [])
                         if graph.accounts[e.account_id].role != "SYSTEM"
                     }
                     if tx
@@ -523,7 +638,7 @@ class BillService:
                         "posted_amount_minor": (
                             sum(
                                 e.amount
-                                for e in s.query(Entry).filter_by(transaction_id=tx.id)
+                                for e in entry_groups.get(tx.id, [])
                                 if e.amount > 0
                             )
                             if tx

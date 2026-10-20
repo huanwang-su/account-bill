@@ -1,6 +1,17 @@
+import { AccountFields } from "./forms/AccountFields";
+import { CategoryFields } from "./forms/CategoryFields";
+import { TagFields } from "./forms/TagFields";
+import { TransactionFields } from "./forms/TransactionFields";
+import { OpeningFields } from "./forms/OpeningFields";
+import { ValuationFields } from "./forms/ValuationFields";
+import { ReconcileFields } from "./forms/ReconcileFields";
+import { SavedReportFields } from "./forms/SavedReportFields";
+import { MetricCard } from "./MetricCard";
+import { AccountChoices } from "./AccountChoices";
 import { ReportPeriodFilter } from "./ReportPeriodFilter";
 import "@ant-design/v5-patch-for-react-19";
 import React from "react";
+import { StatisticTone as Tone } from "./StatisticTone";
 import { createRoot } from "react-dom/client";
 import {
   Collapse,
@@ -11,7 +22,6 @@ import {
   Space,
   Select,
   Input,
-  InputNumber,
   Modal,
   Form,
   TreeSelect,
@@ -35,7 +45,7 @@ import {
 import dayjs from "dayjs";
 import {
   LedgerApi,
-  MoneyFormatter as Money,
+  DisplayMoneyFormatter as Money,
   CategoryTree,
   AccountGroupTree,
   TagTree,
@@ -43,34 +53,106 @@ import {
 } from "./api";
 import "./style.css";
 import { PagedTable } from "./PagedTable";
-import { BillWorkspace } from "./BillWorkspace";
+const BillWorkspace = React.lazy(() =>
+  import("./BillWorkspace").then((module) => ({
+    default: module.BillWorkspace,
+  })),
+);
 import { BillAttention } from "./BillReviewModel";
-import { DataBackupPanel } from "./DataBackupPanel";
-import { ImportWorkspace } from "./ImportWorkspace";
-import { CatalogWorkspace } from "./CatalogWorkspace";
-import { AccountWorkspace } from "./AccountWorkspace";
-import { AccountSettings } from "./AccountSettings";
-import { ClassificationSettings } from "./ClassificationSettings";
-import { BalanceSheetWorkspace } from "./BalanceSheetWorkspace";
-import { FinancialAnalysisWorkspace } from "./FinancialAnalysisWorkspace";
-import { FundFlowWorkspace } from "./FundFlowWorkspace";
+const DataBackupPanel = React.lazy(() =>
+  import("./DataBackupPanel").then((module) => ({
+    default: module.DataBackupPanel,
+  })),
+);
+const ImportWorkspace = React.lazy(() =>
+  import("./ImportWorkspace").then((module) => ({
+    default: module.ImportWorkspace,
+  })),
+);
+const CatalogWorkspace = React.lazy(() =>
+  import("./CatalogWorkspace").then((module) => ({
+    default: module.CatalogWorkspace,
+  })),
+);
+const AccountWorkspace = React.lazy(() =>
+  import("./AccountWorkspace").then((module) => ({
+    default: module.AccountWorkspace,
+  })),
+);
+const AccountSettings = React.lazy(() =>
+  import("./AccountSettings").then((module) => ({
+    default: module.AccountSettings,
+  })),
+);
+const ClassificationSettings = React.lazy(() =>
+  import("./ClassificationSettings").then((module) => ({
+    default: module.ClassificationSettings,
+  })),
+);
+const BalanceSheetWorkspace = React.lazy(() =>
+  import("./BalanceSheetWorkspace").then((module) => ({
+    default: module.BalanceSheetWorkspace,
+  })),
+);
+const FinancialAnalysisWorkspace = React.lazy(() =>
+  import("./FinancialAnalysisWorkspace").then((module) => ({
+    default: module.FinancialAnalysisWorkspace,
+  })),
+);
+const FundFlowWorkspace = React.lazy(() =>
+  import("./FundFlowWorkspace").then((module) => ({
+    default: module.FundFlowWorkspace,
+  })),
+);
 import {
   AppearanceProvider,
   AppearanceSettings,
   Appearance,
 } from "./Appearance";
 import { ReportCharts } from "./ReportCharts";
-import { CounterpartyWorkspace } from "./CounterpartyWorkspace";
-import { InvestmentWorkspace } from "./InvestmentWorkspace";
-import { AnalysisSettings } from "./AnalysisSettings";
-import { SingleAccountWorkspace } from "./SingleAccountWorkspace";
-import { IncomeWorkspace } from "./IncomeWorkspace";
-import { ExpenseWorkspace } from "./ExpenseWorkspace";
+const CounterpartyWorkspace = React.lazy(() =>
+  import("./CounterpartyWorkspace").then((module) => ({
+    default: module.CounterpartyWorkspace,
+  })),
+);
+const InvestmentWorkspace = React.lazy(() =>
+  import("./InvestmentWorkspace").then((module) => ({
+    default: module.InvestmentWorkspace,
+  })),
+);
+const AnalysisSettings = React.lazy(() =>
+  import("./AnalysisSettings").then((module) => ({
+    default: module.AnalysisSettings,
+  })),
+);
+const SingleAccountWorkspace = React.lazy(() =>
+  import("./SingleAccountWorkspace").then((module) => ({
+    default: module.SingleAccountWorkspace,
+  })),
+);
+const IncomeWorkspace = React.lazy(() =>
+  import("./IncomeWorkspace").then((module) => ({
+    default: module.IncomeWorkspace,
+  })),
+);
+const ExpenseWorkspace = React.lazy(() =>
+  import("./ExpenseWorkspace").then((module) => ({
+    default: module.ExpenseWorkspace,
+  })),
+);
 import { Navigation } from "./Navigation";
 import { WorkspaceHeader } from "./WorkspaceHeader";
 import { WorkspaceContent } from "./WorkspaceContent";
 import { SidebarNavigation } from "./SidebarNavigation";
-import { OverviewWorkspace } from "./OverviewWorkspace";
+const OverviewWorkspace = React.lazy(() =>
+  import("./OverviewWorkspace").then((module) => ({
+    default: module.OverviewWorkspace,
+  })),
+);
+import { AmountPrivacy } from "./AmountPrivacy";
+import { AmountPrivacyBoundary } from "./AmountPrivacyBoundary";
+import type { WorkspaceSnapshot, Page, TransactionRecord } from "./contracts";
+import { AmountInput as InputNumber } from "./AmountInput";
 
 import { ReportDetailReading } from "./ReportDetailReading";
 
@@ -119,6 +201,10 @@ interface State {
   importFilter: string;
   billFilters: Row;
   pendingBillCount: number;
+  dataRevision: string;
+  transactionPage: number;
+  transactionPageSize: number;
+  transactionTotal: number;
   newAccountGroup?: number;
   catalogInitial?: Row;
   integrity?: Row;
@@ -148,6 +234,10 @@ class LedgerApp extends React.Component<{}, State> {
     importFilter: "ALL",
     billFilters: ReportPeriodFilter.defaults(),
     pendingBillCount: 0,
+    dataRevision: "",
+    transactionPage: 1,
+    transactionPageSize: 15,
+    transactionTotal: 0,
   };
   async componentDidMount() {
     await this.refresh();
@@ -160,42 +250,56 @@ class LedgerApp extends React.Component<{}, State> {
     this.setState({ reportRefreshing: true });
     try {
       const query = this.api.query(this.state.filters);
-      const [
-        accounts,
-        groups,
-        categories,
-        tags,
-        transactions,
-        summary,
-        batches,
-        saved,
-        pendingBills,
-      ] = await Promise.all(
-        [
-          "/accounts",
-          "/account-groups",
-          "/categories",
-          "/tags",
-          "/transactions?" + query,
-          "/reports/summary?" + query,
-          "/imports",
-          "/reports/saved",
-          "/bills?ledger_status=PENDING",
-        ].map((p) => this.api.request(p)),
-      );
+      const { page, reportTab, transactionPage, transactionPageSize } =
+        this.state;
+      const needsTransactions =
+        page === "transactions" ||
+        (page === "reports" && reportTab === "details");
+      const [workspace, transactions, summary, batches, saved] =
+        await Promise.all([
+          this.api.request<WorkspaceSnapshot>("/workspace"),
+          needsTransactions
+            ? this.api.request(
+                page === "transactions"
+                  ? `/transactions?${query}&page=${transactionPage}&page_size=${transactionPageSize}`
+                  : "/transactions?" + query,
+              )
+            : Promise.resolve(undefined),
+          needsTransactions
+            ? this.api.request("/reports/summary?" + query)
+            : Promise.resolve(undefined),
+          page === "imports"
+            ? this.api.request("/imports")
+            : Promise.resolve(undefined),
+          page === "reports" && reportTab === "details"
+            ? this.api.request("/reports/saved")
+            : Promise.resolve(undefined),
+        ]);
       if (version !== this.refreshVersion) return;
+      const result = transactions as
+        Page<TransactionRecord> | TransactionRecord[] | undefined;
       this.setState({
         reportScopeKey: query,
         reportRefreshing: false,
-        accounts,
-        groups,
-        categories,
-        tags,
-        transactions,
-        summary,
-        batches,
-        saved,
-        pendingBillCount: pendingBills.length,
+        accounts: workspace.accounts,
+        groups: workspace.groups,
+        categories: workspace.categories,
+        tags: workspace.tags,
+        dataRevision: workspace.revision,
+        transactions: result
+          ? Array.isArray(result)
+            ? result
+            : result.items
+          : [],
+        transactionTotal: result
+          ? Array.isArray(result)
+            ? result.length
+            : result.total
+          : 0,
+        summary: summary ?? this.state.summary,
+        batches: batches ?? this.state.batches,
+        saved: saved ?? this.state.saved,
+        pendingBillCount: workspace.pending_bill_count,
         loading: false,
       });
       if (this.state.batch) await this.loadBatch(this.state.batch);
@@ -217,8 +321,9 @@ class LedgerApp extends React.Component<{}, State> {
     }
   }
   setFilter(update: Row) {
-    this.setState({ filters: { ...this.state.filters, ...update } }, () =>
-      this.refresh(),
+    this.setState(
+      { filters: { ...this.state.filters, ...update }, transactionPage: 1 },
+      () => this.refresh(),
     );
   }
   open(modal: string, editing?: Row, kind = "EXPENSE", catalogInitial?: Row) {
@@ -237,7 +342,7 @@ class LedgerApp extends React.Component<{}, State> {
   }
   valuationSubmissionKey = "";
   get accountsOptions() {
-    return this.state.accounts
+    return AccountChoices.rank(this.state.accounts)
       .filter((a) => a.role !== "SYSTEM" && a.active)
       .map((a) => ({ value: a.id, label: a.name }));
   }
@@ -422,30 +527,42 @@ class LedgerApp extends React.Component<{}, State> {
     const reading = new ReportDetailReading(summary, transactions);
     return (
       <div className="metrics">
-        <div className="metric featured">
+        <MetricCard
+          className="metric featured"
+          data-tone={Tone.of(summary.net, "net")}
+        >
           <span>当前范围收支结余</span>
           <strong>¥ {Money.format(summary.net)}</strong>
           <small>收入 − 净支出，不代表账户余额</small>
-        </div>
-        <div className="metric">
+        </MetricCard>
+        <MetricCard
+          className="metric"
+          data-tone={Tone.of(summary.income, "income")}
+        >
           <span>
             <ArrowDownOutlined /> 收入
           </span>
           <strong className="income">¥ {Money.format(summary.income)}</strong>
           <small>当前筛选范围，含筛选内的证券盈利</small>
-        </div>
-        <div className="metric">
+        </MetricCard>
+        <MetricCard
+          className="metric"
+          data-tone={Tone.of(summary.expense, "expense")}
+        >
           <span>
             <ArrowUpOutlined /> 净支出
           </span>
           <strong>¥ {Money.format(summary.expense)}</strong>
           <small>已扣除退款，含筛选内的证券亏损</small>
-        </div>
-        <div className="metric">
+        </MetricCard>
+        <MetricCard
+          className="metric"
+          data-tone={Tone.of(reading.refunds, "income")}
+        >
           <span>其中：独立退款抵减</span>
           <strong>¥ {Money.format(reading.refunds)}</strong>
           <small>{reading.count("REFUND")} 笔退款，已在净支出中扣除</small>
-        </div>
+        </MetricCard>
       </div>
     );
   }
@@ -591,13 +708,7 @@ class LedgerApp extends React.Component<{}, State> {
           })
         }
         onConfigure={() => this.setState({ page: "analysis-settings" })}
-        refreshKey={JSON.stringify([
-          this.state.accounts,
-          this.state.groups,
-          this.state.transactions,
-          this.state.batches,
-          this.state.pendingBillCount,
-        ])}
+        refreshKey={this.state.dataRevision}
         onReport={(reportTab) => {
           if (reportTab === "details")
             this.setState(
@@ -618,7 +729,7 @@ class LedgerApp extends React.Component<{}, State> {
           })
         }
         onImport={() => {
-          this.setState({ page: "imports" });
+          this.setState({ page: "imports" }, () => this.refresh());
           if (!this.state.batch && this.state.batches[0])
             this.loadBatch(this.state.batches[0].id);
         }}
@@ -670,7 +781,7 @@ class LedgerApp extends React.Component<{}, State> {
       <>
         {this.renderFilters()}
         <Card
-          title={`${this.state.transactions.length} 笔流水`}
+          title={`${this.state.transactionTotal} 笔流水`}
           extra={
             <Space>
               <Button
@@ -693,6 +804,15 @@ class LedgerApp extends React.Component<{}, State> {
             rowKey="id"
             columns={this.transactionColumns}
             dataSource={this.state.transactions}
+            remote={{
+              current: this.state.transactionPage,
+              pageSize: this.state.transactionPageSize,
+              total: this.state.transactionTotal,
+              onChange: (transactionPage, transactionPageSize) =>
+                this.setState({ transactionPage, transactionPageSize }, () =>
+                  this.refresh(),
+                ),
+            }}
             scroll={{ x: 1050 }}
             defaultPageSize={15}
             pageResetKey={JSON.stringify(this.state.filters)}
@@ -706,10 +826,7 @@ class LedgerApp extends React.Component<{}, State> {
       <>
         <ImportWorkspace
           onChanged={() => this.refresh()}
-          refreshKey={JSON.stringify([
-            this.state.batches.map((b) => [b.id, b.counts]),
-            this.state.transactions.map((t) => [t.id, t.status]),
-          ])}
+          refreshKey={this.state.dataRevision}
         />
         <Collapse
           className="mt"
@@ -976,13 +1093,7 @@ class LedgerApp extends React.Component<{}, State> {
     );
   }
   renderReports() {
-    const refreshKey = JSON.stringify([
-      this.state.accounts,
-      this.state.groups,
-      this.state.categories,
-      this.state.tags,
-      this.state.transactions,
-    ]);
+    const refreshKey = this.state.dataRevision;
     const items = [
       {
         key: "income",
@@ -1049,6 +1160,7 @@ class LedgerApp extends React.Component<{}, State> {
             refreshKey={refreshKey}
             onDetail={(row) => this.open("detail", row)}
             onValuation={(account) => this.open("valuation", account)}
+            onChanged={() => this.refresh()}
           />
         ),
       },
@@ -1255,7 +1367,7 @@ class LedgerApp extends React.Component<{}, State> {
     if (modal === "raw")
       return (
         <Descriptions bordered column={1} size="small">
-          {Object.entries(e!.raw).map(([k, v]) => (
+          {Object.entries(AmountPrivacy.fields(e!.raw)).map(([k, v]) => (
             <Descriptions.Item key={k} label={k}>
               {String(v) || "—"}
             </Descriptions.Item>
@@ -1321,6 +1433,17 @@ class LedgerApp extends React.Component<{}, State> {
         tags: [],
         group_id: this.state.newAccountGroup,
       };
+    const fieldProps = {
+      modal,
+      editing: e,
+      formKind,
+      groups: this.state.groups,
+      tags: this.state.tags,
+      transactions: this.state.transactions,
+      tree: this.tree,
+      tagOptions: this.tagOptions,
+      accountsOptions: this.accountsOptions,
+    };
     return (
       <Form
         ref={this.form}
@@ -1338,413 +1461,16 @@ class LedgerApp extends React.Component<{}, State> {
           }
         }}
       >
-        {modal === "account" && (
-          <>
-            <div className="form-grid">
-              <Form.Item
-                name="name"
-                label="账户名称"
-                rules={[{ required: true }]}
-              >
-                <Input placeholder="例如：招商银行储蓄卡" />
-              </Form.Item>
-              <Form.Item name="role" label="账户角色">
-                <Select
-                  options={[
-                    { value: "ASSET", label: "自有资产" },
-                    { value: "LIABILITY", label: "自有负债" },
-                    { value: "EXTERNAL", label: "外部往来" },
-                  ]}
-                />
-              </Form.Item>
-            </div>
-            <div className="form-grid">
-              <Form.Item name="number" label="账号 / 卡号">
-                <Input />
-              </Form.Item>
-              <Form.Item name="kind" label="账户类型">
-                <Select
-                  options={[
-                    "支付宝",
-                    "微信",
-                    "银行卡",
-                    "现金",
-                    "信用卡",
-                    "公司贷款",
-                    "房贷",
-                    "理财",
-                    "证券",
-                    "其他",
-                  ].map((x) => ({ value: x, label: x }))}
-                />
-              </Form.Item>
-            </div>
-            <Form.Item name="group_id" label="所属账户组">
-              <Select
-                allowClear
-                options={new AccountGroupTree(this.state.groups).options()}
-                placeholder="选择个人或家庭账户组"
-              />
-            </Form.Item>
-            <Form.Item name="tags" label="账户标签">
-              <Select
-                mode="tags"
-                options={this.tagOptions.filter(
-                  (t) =>
-                    !this.state.tags.some(
-                      (x) => x.name === t.value && x.scope === "TRANSACTION",
-                    ),
-                )}
-              />
-            </Form.Item>
-            <Form.Item name="note" label="账户备注">
-              <Input.TextArea
-                rows={3}
-                maxLength={2000}
-                showCount
-                placeholder="例如：每月还款金额、还款截止月份等"
-              />
-            </Form.Item>
-            <Form.Item name="active" label="启用账户" valuePropName="checked">
-              <Switch />
-            </Form.Item>
-          </>
-        )}
-        {modal === "category" && (
-          <>
-            <Form.Item
-              name="name"
-              label="分类名称"
-              rules={[{ required: true }]}
-            >
-              <Input />
-            </Form.Item>
-            <Form.Item name="kind" label="类型">
-              <Select
-                options={[
-                  { value: "EXPENSE", label: "支出" },
-                  { value: "INCOME", label: "收入" },
-                ]}
-              />
-            </Form.Item>
-            <Form.Item name="parent_id" label="父分类（留空为顶级）">
-              <TreeSelect allowClear treeData={this.tree.options()} />
-            </Form.Item>
-            <Form.Item name="active" label="启用" valuePropName="checked">
-              <Switch />
-            </Form.Item>
-            <p className="muted">移动分类会改变历史报表的分类归属。</p>
-          </>
-        )}
-        {modal === "tag" && (
-          <>
-            <Form.Item
-              name="name"
-              label="标签名称"
-              rules={[{ required: true }]}
-            >
-              <Input />
-            </Form.Item>
-            <Form.Item name="parent_id" label="父标签">
-              <TreeSelect
-                allowClear
-                placeholder="留空为一级标签"
-                treeDefaultExpandAll
-                treeData={new TagTree(this.state.tags).options(
-                  undefined,
-                  null,
-                  true,
-                  e?.id
-                    ? new TagTree(this.state.tags).descendants(e.id)
-                    : new Set(),
-                )}
-              />
-            </Form.Item>
-            <Form.Item name="scope" label="适用范围">
-              <Select
-                options={[
-                  { value: "BOTH", label: "账户与流水" },
-                  { value: "ACCOUNT", label: "账户" },
-                  { value: "TRANSACTION", label: "流水" },
-                ]}
-              />
-            </Form.Item>
-          </>
-        )}
+        {modal === "account" && <AccountFields {...fieldProps} />}
+        {modal === "category" && <CategoryFields {...fieldProps} />}
+        {modal === "tag" && <TagFields {...fieldProps} />}
         {["transaction", "decision"].includes(modal || "") && (
-          <>
-            {modal === "decision" && (
-              <Alert
-                className="mb"
-                type="info"
-                message={`${e!.counterparty} · ${e!.note}`}
-                description={`原口径：${e!.direction}；原付款方式：${e!.method || "未提供"}。${e!.warning}`}
-              />
-            )}
-            <Form.Item
-              name="kind"
-              label="业务类型"
-              rules={[{ required: true }]}
-            >
-              <Select
-                options={["EXPENSE", "INCOME", "TRANSFER", "REFUND"].map(
-                  (x) => ({ value: x, label: kindNames[x] }),
-                )}
-              />
-            </Form.Item>
-            <div className="form-grid">
-              <Form.Item
-                name="account_id"
-                label={
-                  formKind === "TRANSFER"
-                    ? "转出账户"
-                    : ["INCOME", "REFUND"].includes(formKind)
-                      ? "收款账户"
-                      : "付款账户"
-                }
-                rules={[{ required: true }]}
-              >
-                <Select
-                  options={this.accountsOptions}
-                  placeholder="请选择实际账户"
-                />
-              </Form.Item>
-              {formKind === "TRANSFER" ? (
-                <Form.Item
-                  name="to_account_id"
-                  label="转入账户"
-                  rules={[{ required: true }]}
-                >
-                  <Select options={this.accountsOptions} />
-                </Form.Item>
-              ) : modal === "decision" ? (
-                <Form.Item
-                  name="category_id"
-                  label="分类"
-                  rules={[{ required: true }]}
-                >
-                  <TreeSelect
-                    treeData={this.tree.options(
-                      formKind === "INCOME" ? "INCOME" : "EXPENSE",
-                    )}
-                  />
-                </Form.Item>
-              ) : (
-                <Form.Item
-                  name="occurred_at"
-                  label="交易时间"
-                  rules={[{ required: true }]}
-                >
-                  <DatePicker showTime style={{ width: "100%" }} />
-                </Form.Item>
-              )}
-            </div>
-            {(modal === "decision" ||
-              ["TRANSFER", "REFUND"].includes(formKind)) && (
-              <Form.Item
-                name="amount"
-                label="实际金额（元）"
-                rules={[{ required: true }]}
-              >
-                <InputNumber
-                  stringMode
-                  min="0.01"
-                  precision={2}
-                  style={{ width: "100%" }}
-                />
-              </Form.Item>
-            )}
-            {modal === "transaction" && formKind === "REFUND" && (
-              <Alert
-                className="mb"
-                type="info"
-                message="退款统一使用“退款”分类"
-              />
-            )}
-            {modal === "transaction" &&
-              !["TRANSFER", "REFUND"].includes(formKind) && (
-                <Form.List name="items">
-                  {(fields, { add, remove }) => (
-                    <>
-                      <label className="form-label">金额与分类（可拆分）</label>
-                      {fields.map(({ key, name, ...rest }) => (
-                        <div key={key} className="split-row">
-                          <Form.Item
-                            {...rest}
-                            name={[name, "category_id"]}
-                            rules={[{ required: true, message: "请选择分类" }]}
-                          >
-                            <TreeSelect
-                              placeholder="分类"
-                              treeData={this.tree.options(
-                                formKind === "INCOME" ? "INCOME" : "EXPENSE",
-                              )}
-                            />
-                          </Form.Item>
-                          <Form.Item
-                            {...rest}
-                            name={[name, "amount"]}
-                            rules={[{ required: true, message: "请填写金额" }]}
-                          >
-                            <InputNumber
-                              stringMode
-                              min="0.01"
-                              precision={2}
-                              placeholder="金额（元）"
-                              style={{ width: "100%" }}
-                            />
-                          </Form.Item>
-                          {fields.length > 1 && (
-                            <Button onClick={() => remove(name)}>移除</Button>
-                          )}
-                        </div>
-                      ))}
-                      <Button type="dashed" onClick={() => add({})} block>
-                        添加一项分类
-                      </Button>
-                    </>
-                  )}
-                </Form.List>
-              )}
-            {modal === "transaction" && formKind === "TRANSFER" && (
-              <Form.Item
-                name="occurred_at"
-                label="交易时间"
-                rules={[{ required: true }]}
-              >
-                <DatePicker showTime style={{ width: "100%" }} />
-              </Form.Item>
-            )}
-            {formKind === "REFUND" && (
-              <Form.Item name="related_id" label="关联原支出（可选）">
-                <Select
-                  allowClear
-                  showSearch
-                  optionFilterProp="label"
-                  options={this.state.transactions
-                    .filter((t) => t.kind === "EXPENSE")
-                    .map((t) => ({
-                      value: t.id,
-                      label: `#${t.id} ${t.counterparty} ¥${Money.format(t.amount)}`,
-                    }))}
-                />
-              </Form.Item>
-            )}
-            {modal === "transaction" && (
-              <>
-                <Form.Item className="mt" name="counterparty" label="交易对方">
-                  <Input placeholder="商户名称，仅保存在交易中" />
-                </Form.Item>
-                <Form.Item name="note" label="备注">
-                  <Input.TextArea rows={2} />
-                </Form.Item>
-                <Form.Item name="tags" label="流水标签">
-                  <Select
-                    mode="tags"
-                    options={this.tagOptions.filter(
-                      (t) =>
-                        !this.state.tags.some(
-                          (x) => x.name === t.value && x.scope === "ACCOUNT",
-                        ),
-                    )}
-                  />
-                </Form.Item>
-              </>
-            )}
-          </>
+          <TransactionFields {...fieldProps} />
         )}
-        {modal === "opening" && (
-          <>
-            <Alert
-              className="mb"
-              type="info"
-              message="填写最早一笔流水发生前的真实余额。负债账户欠款请填写负数。"
-            />
-            <Form.Item
-              name="amount"
-              label="期初余额（元）"
-              rules={[{ required: true }]}
-            >
-              <InputNumber stringMode precision={2} style={{ width: "100%" }} />
-            </Form.Item>
-            <Form.Item
-              name="occurred_at"
-              label="期初时间"
-              rules={[{ required: true }]}
-            >
-              <DatePicker showTime style={{ width: "100%" }} />
-            </Form.Item>
-          </>
-        )}
-        {modal === "valuation" && (
-          <>
-            <Alert
-              className="mb"
-              type="info"
-              message={
-                e!.opening_set
-                  ? "按新总资产与已记账余额的差额，生成估值盈亏交易。"
-                  : "首次余额作为期初基准，不计算收益。已有流水时，请先补全期初。"
-              }
-              description="填写证券账户总资产（资金余额 + 持仓市值），不要只填可用资金。充值、提现先记内部转账，再更新余额；更新时间不能早于已有流水。"
-            />
-            <p>当前已记录余额：¥ {Money.format(e!.balance)}</p>
-            <Form.Item
-              name="actual"
-              label="证券账户总资产（元）"
-              rules={[{ required: true }]}
-            >
-              <InputNumber
-                stringMode
-                min="0"
-                precision={2}
-                style={{ width: "100%" }}
-              />
-            </Form.Item>
-            <Form.Item
-              name="occurred_at"
-              label="余额更新时间"
-              rules={[{ required: true }]}
-            >
-              <DatePicker
-                showTime
-                style={{ width: "100%" }}
-                onKeyDown={(event) => {
-                  if (event.key === "Enter") event.preventDefault();
-                }}
-              />
-            </Form.Item>
-            <Form.Item name="note" label="更新备注">
-              <Input placeholder="例如：月末资产估值" />
-            </Form.Item>
-          </>
-        )}
-        {modal === "reconcile" && (
-          <>
-            <Form.Item
-              name="at"
-              label="核对截止时间"
-              rules={[{ required: true }]}
-            >
-              <DatePicker showTime style={{ width: "100%" }} />
-            </Form.Item>
-            <Form.Item
-              name="actual"
-              label="外部实际余额（元，欠款填负数）"
-              rules={[{ required: true }]}
-            >
-              <InputNumber stringMode precision={2} style={{ width: "100%" }} />
-            </Form.Item>
-            <Form.Item name="note" label="核对备注">
-              <Input />
-            </Form.Item>
-          </>
-        )}
-        {modal === "saveReport" && (
-          <Form.Item name="name" label="报表名称" rules={[{ required: true }]}>
-            <Input placeholder="例如：家庭每月餐饮" />
-          </Form.Item>
-        )}
+        {modal === "opening" && <OpeningFields {...fieldProps} />}
+        {modal === "valuation" && <ValuationFields {...fieldProps} />}
+        {modal === "reconcile" && <ReconcileFields {...fieldProps} />}
+        {modal === "saveReport" && <SavedReportFields {...fieldProps} />}
         <div className="modal-footer">
           <Button onClick={() => this.setState({ modal: undefined })}>
             取消
@@ -1811,6 +1537,11 @@ class LedgerApp extends React.Component<{}, State> {
                 },
                 () => {
                   if (
+                    ["transactions", "imports"].includes(page) ||
+                    (page === "reports" && reportTab === "details")
+                  )
+                    void this.refresh();
+                  if (
                     page === "imports" &&
                     !this.state.batch &&
                     this.state.batches[0]
@@ -1863,46 +1594,49 @@ class LedgerApp extends React.Component<{}, State> {
           <WorkspaceContent
             route={Navigation.target(this.state.page, this.state.reportTab).key}
           >
-            {this.state.loading ? (
-              <Card loading />
-            ) : this.state.page === "bills" ? (
-              <BillWorkspace
-                mode="list"
-                initialFilters={this.state.billFilters}
-                onChanged={() => this.refresh()}
-                refreshKey={JSON.stringify([
-                  this.state.batches.map((b) => [b.id, b.counts]),
-                  this.state.transactions.map((t) => [t.id, t.status]),
-                ])}
-              />
-            ) : this.state.page === "overview" ? (
-              this.renderOverview()
-            ) : this.state.page === "accounts" ? (
-              this.renderAccounts()
-            ) : this.state.page === "transactions" ? (
-              this.renderTransactions()
-            ) : this.state.page === "imports" ? (
-              this.renderImports()
-            ) : this.state.page === "catalog" ? (
-              this.renderCatalog()
-            ) : this.state.page === "reports" ? (
-              this.renderReports()
-            ) : this.state.page === "analysis-settings" ? (
-              <AnalysisSettings
-                accounts={this.state.accounts}
-                onChanged={() => this.refresh()}
-                onSingleAccounts={() =>
-                  this.setState({
-                    page: "reports",
-                    reportTab: "single-accounts",
-                  })
+            <React.Suspense fallback={<Card loading />}>
+              <AmountPrivacyBoundary>
+                {() =>
+                  this.state.loading ? (
+                    <Card loading />
+                  ) : this.state.page === "bills" ? (
+                    <BillWorkspace
+                      mode="list"
+                      initialFilters={this.state.billFilters}
+                      onChanged={() => this.refresh()}
+                      refreshKey={this.state.dataRevision}
+                    />
+                  ) : this.state.page === "overview" ? (
+                    this.renderOverview()
+                  ) : this.state.page === "accounts" ? (
+                    this.renderAccounts()
+                  ) : this.state.page === "transactions" ? (
+                    this.renderTransactions()
+                  ) : this.state.page === "imports" ? (
+                    this.renderImports()
+                  ) : this.state.page === "catalog" ? (
+                    this.renderCatalog()
+                  ) : this.state.page === "reports" ? (
+                    this.renderReports()
+                  ) : this.state.page === "analysis-settings" ? (
+                    <AnalysisSettings
+                      accounts={this.state.accounts}
+                      onChanged={() => this.refresh()}
+                      onSingleAccounts={() =>
+                        this.setState({
+                          page: "reports",
+                          reportTab: "single-accounts",
+                        })
+                      }
+                    />
+                  ) : this.state.page === "data" ? (
+                    this.renderData()
+                  ) : (
+                    this.renderSettings()
+                  )
                 }
-              />
-            ) : this.state.page === "data" ? (
-              this.renderData()
-            ) : (
-              this.renderSettings()
-            )}
+              </AmountPrivacyBoundary>
+            </React.Suspense>
           </WorkspaceContent>
           <footer>
             有数 · 每一笔，都算数 <span>本地账本 v0.18</span>
@@ -1916,7 +1650,11 @@ class LedgerApp extends React.Component<{}, State> {
           width={680}
           destroyOnHidden
         >
-          {this.state.modal && this.renderForm()}
+          <React.Suspense fallback={<Card loading />}>
+            <AmountPrivacyBoundary>
+              {() => this.state.modal && this.renderForm()}
+            </AmountPrivacyBoundary>
+          </React.Suspense>
         </Modal>
       </div>
     );

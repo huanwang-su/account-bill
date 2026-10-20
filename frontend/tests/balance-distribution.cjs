@@ -873,7 +873,7 @@ for (const target of Navigation.targets()) {
   if (!["overview", "accounts"].includes(target.page))
     assert.ok(Navigation.parent(target.key));
 }
-assert.deepEqual(Navigation.openKeys(["reports", "ledger"]), ["ledger"]);
+assert.deepEqual(Navigation.openKeys(["reports", "ledger"]), ["reports", "ledger"]);
 assert.deepEqual(Navigation.openKeys([]), []);
 const { SidebarNavigation } = loadTs(path.join(src, "SidebarNavigation.tsx"));
 const onNavigate = () => {};
@@ -889,13 +889,13 @@ sidebar.setState = (patch) => {
 const previous = sidebar.props;
 sidebar.props = { page: "accounts", reportTab: "expenses", onNavigate };
 sidebar.componentDidUpdate(previous);
-assert.deepEqual(sidebar.state.openKeys, []);
+assert.deepEqual(sidebar.state.openKeys, ["reports"]);
 sidebar.setState({ openKeys: [] });
 sidebar.componentDidUpdate(sidebar.props);
 assert.deepEqual(sidebar.state.openKeys, []); // User collapse survives unrelated refresh.
 const menu = sidebar.render().props.children;
 menu.props.onOpenChange(["management", "reports"]);
-assert.deepEqual(sidebar.state.openKeys, ["reports"]);
+assert.deepEqual(sidebar.state.openKeys, ["management", "reports"]);
 let navigated;
 sidebar.props = {
   ...sidebar.props,
@@ -908,7 +908,7 @@ assert.deepEqual(navigated, ["reports", "investments"]);
 sidebar.render().props.children.props.onClick({ key: "report:fund-flow" });
 assert.deepEqual(navigated, ["reports", "fund-flow"]);
 console.log(
-  "Two-level navigation routes, accordion and programmatic selection passed.",
+  "Two-level navigation routes, expanded reports and programmatic selection passed.",
 );
 
 const { AnalysisAccountSelection } = loadTs(

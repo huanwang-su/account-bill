@@ -1,6 +1,7 @@
 """Signed account movements grouped by exact counterparty, with valuations separate."""
 
 import re
+from .report_context import consistent_read
 from .services import ReportService
 from .account_config import AccountGraph
 from .domain import DomainError
@@ -10,15 +11,20 @@ class CounterpartyAnalysisService:
     def __init__(self, db):
         self.db = db
 
-    def analyze(self, account_id, filters=None):
+    @consistent_read
+    def analyze(self, account_id, filters=None, *, rows=None):
         with self.db.read() as s:
             account = AccountGraph(s).canonical(account_id)
             if account.role not in ("ASSET", "LIABILITY"):
                 raise DomainError("请选择自有资金账户")
             key, name = account.id, account.name
         filters = filters or {}
-        rows = ReportService(self.db).list(
-            dict(start=filters.get("start"), end=filters.get("end"), account_id=key)
+        rows = (
+            rows
+            if rows is not None
+            else ReportService(self.db).list(
+                dict(start=filters.get("start"), end=filters.get("end"), account_id=key)
+            )
         )
         groups = {}
         for row in rows:
@@ -39,7 +45,7 @@ class CounterpartyAnalysisService:
                     )
                 )
             party = party or "未填写交易方"
-            valuation = row["source"] == "证券余额更新"
+            valuation = row.get("purpose") == "VALUATION"
             if (
                 filters.get("q")
                 and filters["q"].strip().casefold() not in party.casefold()

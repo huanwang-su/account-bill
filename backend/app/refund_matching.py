@@ -5,7 +5,7 @@ import json
 from collections import defaultdict
 from typing import Literal, Optional
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
-from .bills import BillDocument, BillClassification
+from .bills import BillClassification
 from .domain import Clock, DomainError
 from .models import (
     Bill,

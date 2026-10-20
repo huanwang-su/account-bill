@@ -1,10 +1,13 @@
+import { LatestRequest } from "./LatestRequest";
 import { ReportPeriodFilter } from "./ReportPeriodFilter";
 import React from "react";
+import { AccountChoices } from "./AccountChoices";
+import { StatisticTone as Tone } from "./StatisticTone";
 import { Button, Card, Empty, Select, Spin, Tabs, Tag, Segmented } from "antd";
 import {
   AccountGroupTree,
   LedgerApi,
-  MoneyFormatter as Money,
+  DisplayMoneyFormatter as Money,
   type Row,
 } from "./api";
 import { AnalysisDrilldownBar } from "./AnalysisDrilldown";
@@ -38,7 +41,7 @@ export class FundFlowWorkspace extends React.Component<Props, State> {
   api = new LedgerApi();
   detailFocus = new AnalysisDetailFocus();
   boundaryRef = React.createRef<ScopeFundFlowSection>();
-  requestVersion = 0;
+  loader = new LatestRequest(this.api);
   state: State = {
     filters: ReportPeriodFilter.defaults(),
     dimension: "account",
@@ -57,23 +60,23 @@ export class FundFlowWorkspace extends React.Component<Props, State> {
   }
 
   componentWillUnmount() {
-    this.requestVersion++;
+    this.loader.dispose();
     this.detailFocus.cancel();
   }
 
   async load() {
     this.detailFocus.cancel();
-    const version = ++this.requestVersion;
+    const version = this.loader.begin();
     this.setState({ loading: true, error: undefined });
     try {
       const report = await this.api.request(
         "/reports/fund-flows?" +
           this.api.query(ReportAccountFilters.query(this.state.filters)),
       );
-      if (version === this.requestVersion)
+      if (this.loader.current(version))
         this.setState({ report, loading: false });
     } catch (error) {
-      if (version === this.requestVersion)
+      if (this.loader.current(version))
         this.setState({
           report: undefined,
           loading: false,
@@ -422,7 +425,20 @@ export class FundFlowWorkspace extends React.Component<Props, State> {
             ["净流入", summary.net, "范围转入减范围转出"],
             ["账户间转账", summary.internal, "包括范围内互转，每条线路计一次"],
           ].map(([title, value, note]) => (
-            <div className="fund-flow-stat" key={title}>
+            <div
+              className="fund-flow-stat"
+              key={title}
+              data-tone={Tone.of(
+                Number(value),
+                title === "范围转入"
+                  ? "income"
+                  : title === "范围转出"
+                    ? "expense"
+                    : title === "净流入"
+                      ? "net"
+                      : "transfer",
+              )}
+            >
               <span>{title}</span>
               <strong>
                 ¥ {this.amount(value as number, title === "净流入")}
@@ -559,7 +575,7 @@ export class FundFlowWorkspace extends React.Component<Props, State> {
 
   render() {
     const { filters, dimension, view, report, loading, error } = this.state;
-    const accounts = this.props.accounts.filter(
+    const accounts = AccountChoices.rank(this.props.accounts).filter(
       (row) => ["ASSET", "LIABILITY"].includes(row.role) && !row.merged_into_id,
     );
     return (

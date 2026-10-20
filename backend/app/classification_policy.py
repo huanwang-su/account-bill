@@ -2,7 +2,7 @@
 
 import json
 from pydantic import BaseModel, ConfigDict, Field, StrictBool
-from .models import ClassificationPolicy, Bill, BillLedger
+from .models import ClassificationPolicy, BillLedger
 from .domain import Clock, DomainError
 
 

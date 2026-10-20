@@ -149,19 +149,38 @@ def test_date_bounds_reversal_and_merge_never_duplicate(portfolio):
         and period["ending"] == 365000
         and period["profit"] == 5000
     )
+    with pytest.raises(DomainError, match="已有证券估值"):
+        TransactionService(db).reverse(first)
+    values = SecuritiesValuationService(db)
+    replay = [
+        row
+        for row in values.history(a)
+        if not row["baseline"] and row["transaction_id"] != first
+    ]
+    for row in replay:
+        values.cancel(a, row["id"])
     TransactionService(db).reverse(first)
+    for row in replay[::-1]:
+        values.update(
+            a,
+            dict(
+                actual=str(row["actual"] / 100),
+                occurred_at=row["occurred_at"],
+                idempotency_key="rebuilt:" + str(row["id"]),
+            ),
+        )
     reversed = service.analyze(end="2026-09-30")
     assert (
-        reversed["profit"] == 30500
-        and reversed["ending"] == 360500
+        reversed["profit"] == 40500
+        and reversed["ending"] == 370500
         and reversed["reconciled"]
     )
     AccountMergeService(db).merge(dict(source_id=b, target_id=a))
     merged = service.analyze(b, end="2026-09-30")
     assert (
         merged["account_count"] == 1
-        and merged["profit"] == 30500
-        and merged["ending"] == 360500
+        and merged["profit"] == 40500
+        and merged["ending"] == 370500
     )
     assert merged["internal_net"] == 0 and merged["internal_volume"] == 0
 

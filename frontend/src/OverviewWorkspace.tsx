@@ -1,5 +1,9 @@
+import { TransactionSemantics } from "./TransactionSemantics";
+import { MetricCard } from "./MetricCard";
+import { LatestRequest } from "./LatestRequest";
 import { ReportPeriodFilter } from "./ReportPeriodFilter";
 import React from "react";
+import { StatisticTone as Tone } from "./StatisticTone";
 import {
   Button,
   Card,
@@ -12,7 +16,7 @@ import {
   message,
 } from "antd";
 import { ArrowRightOutlined, ReloadOutlined } from "@ant-design/icons";
-import { LedgerApi, MoneyFormatter as Money, Row } from "./api";
+import { LedgerApi, DisplayMoneyFormatter as Money, Row } from "./api";
 import { Chart } from "./Chart";
 
 import { OverviewReading } from "./OverviewReading";
@@ -45,7 +49,7 @@ interface State {
 }
 export class OverviewWorkspace extends React.Component<Props, State> {
   api = new LedgerApi();
-  requestVersion = 0;
+  loader = new LatestRequest(this.api);
   chartVersion = 0;
   detailVersion = 0;
   state: State = {
@@ -61,23 +65,22 @@ export class OverviewWorkspace extends React.Component<Props, State> {
     if (previous.refreshKey !== this.props.refreshKey) this.load();
   }
   componentWillUnmount() {
-    this.requestVersion++;
+    this.loader.dispose();
     this.chartVersion++;
     this.detailVersion++;
   }
   async load() {
     this.closeChart();
-    const version = ++this.requestVersion;
+    const version = this.loader.begin();
     this.setState({ loading: true });
     try {
       const data = await this.api.request(
         "/reports/overview?" +
           this.api.query(ReportAccountFilters.query(this.state.filters)),
       );
-      if (version === this.requestVersion)
-        this.setState({ data, loading: false });
+      if (this.loader.current(version)) this.setState({ data, loading: false });
     } catch (error) {
-      if (version === this.requestVersion) {
+      if (this.loader.current(version)) {
         this.setState({ data: undefined, loading: false });
         message.error(error instanceof Error ? error.message : "总览加载失败");
       }
@@ -132,7 +135,7 @@ export class OverviewWorkspace extends React.Component<Props, State> {
       (row: Row) =>
         (!day || row.occurred_at.slice(0, 10) === day) &&
         (!flow ||
-          (row.source !== "证券余额更新" &&
+          (!TransactionSemantics.isValuation(row) &&
             (flow === "income"
               ? row.kind === "INCOME"
               : flow === "expense"
@@ -385,7 +388,7 @@ export class OverviewWorkspace extends React.Component<Props, State> {
                         <>
                           <strong>{Money.format(value)}</strong>
                           <div className="muted">
-                            {row.source === "证券余额更新"
+                            {TransactionSemantics.isValuation(row)
                               ? "证券估值"
                               : (
                                   {
@@ -893,7 +896,18 @@ export class OverviewWorkspace extends React.Component<Props, State> {
                 "证券及理财账户，本金转入转出不计收益",
               ],
             ].map(([title, value, note]) => (
-              <div className="metric" key={String(title)}>
+              <MetricCard
+                className="metric"
+                key={String(title)}
+                data-tone={Tone.of(
+                  Number(value),
+                  title === "期间收入"
+                    ? "income"
+                    : title === "期间净支出"
+                      ? "expense"
+                      : "net",
+                )}
+              >
                 <span>{title}</span>
                 <strong
                   className={
@@ -907,7 +921,7 @@ export class OverviewWorkspace extends React.Component<Props, State> {
                   ¥ {Money.format(Number(value))}
                 </strong>
                 <small>{note}</small>
-              </div>
+              </MetricCard>
             ))}
           </div>
           <div className="overview-core-grid">
@@ -1105,14 +1119,14 @@ export class OverviewWorkspace extends React.Component<Props, State> {
           </div>
           {this.renderBalanceHero(d)}
           <div className="overview-cashflow">
-            <Card>
+            <Card data-tone={Tone.of(household.income, "income")}>
               <span>本月生活收入</span>
               <strong className="income">
                 ¥ {Money.format(household.income)}
               </strong>
               <small>已入账生活收入，不含内部转账和理财盈亏</small>
             </Card>
-            <Card>
+            <Card data-tone={Tone.of(household.expense, "expense")}>
               <span>本月家庭开支（净额）</span>
               <strong>¥ {Money.format(household.expense)}</strong>
               <small>
@@ -1120,7 +1134,7 @@ export class OverviewWorkspace extends React.Component<Props, State> {
                 {Money.format(household.refunds)}
               </small>
             </Card>
-            <Card>
+            <Card data-tone={Tone.of(household.net, "net")}>
               <span>本月生活收支结余</span>
               <strong
                 className={household.net < 0 ? "balance-negative" : "income"}
@@ -1236,7 +1250,7 @@ export class OverviewWorkspace extends React.Component<Props, State> {
                   <button key={r.id} onClick={() => this.props.onDetail(r)}>
                     <div>
                       <strong>
-                        {r.source === "证券余额更新"
+                        {TransactionSemantics.isValuation(r)
                           ? "证券估值" + (r.kind === "INCOME" ? "盈利" : "亏损")
                           : r.counterparty ||
                             (

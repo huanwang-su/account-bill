@@ -10,6 +10,7 @@ import {
 } from "antd";
 import { CategoryTree, type Row } from "./api";
 import { BillReviewModel } from "./BillReviewModel";
+import { AmountInput } from "./AmountInput";
 
 export class BillReviewForm extends React.Component<
   {
@@ -171,7 +172,7 @@ export class BillReviewForm extends React.Component<
           label="实际资金变动金额（元）"
           rules={[{ required: true }]}
         >
-          <InputNumber
+          <AmountInput
             stringMode
             precision={2}
             min={0.01}

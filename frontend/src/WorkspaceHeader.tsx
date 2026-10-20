@@ -1,4 +1,5 @@
 import React from "react";
+import { AmountVisibilityToggle } from "./AmountVisibilityToggle";
 
 /** One page title and a quiet location trail shared by the whole desktop app. */
 export class WorkspaceHeader extends React.Component<{
@@ -23,7 +24,10 @@ export class WorkspaceHeader extends React.Component<{
           <h1>{this.props.title}</h1>
           {this.props.description && <p>{this.props.description}</p>}
         </div>
-        <div className="workspace-actions">{this.props.actions}</div>
+        <div className="workspace-actions">
+          <AmountVisibilityToggle />
+          {this.props.actions}
+        </div>
       </header>
     );
   }

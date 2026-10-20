@@ -1,8 +1,17 @@
+import { AmountPrivacy } from "./AmountPrivacy";
+
 export type Row = Record<string, any>;
 export class LedgerApi {
+  private static pending = new Map<string, Promise<unknown>>();
+  private reads?: AbortController;
+  cancelReads() {
+    this.reads?.abort();
+    this.reads = new AbortController();
+  }
   private async response(path: string, method = "GET", body?: unknown) {
     const response = await fetch("/api" + path, {
       method,
+      signal: method === "GET" ? this.reads?.signal : undefined,
       headers:
         body instanceof FormData
           ? { "X-Ledger-Client": "local-web" }
@@ -27,8 +36,34 @@ export class LedgerApi {
     }
     return response;
   }
-  async request(path: string, method = "GET", body?: unknown): Promise<any> {
-    return (await this.response(path, method, body)).json();
+  async request<T = any>(
+    path: string,
+    method = "GET",
+    body?: unknown,
+  ): Promise<T> {
+    if (method !== "GET") {
+      LedgerApi.pending.clear();
+      try {
+        return (await this.response(path, method, body)).json();
+      } finally {
+        LedgerApi.pending.clear();
+      }
+    }
+    if (this.reads) return (await this.response(path, method, body)).json();
+    let pending = LedgerApi.pending.get(path);
+    if (!pending) {
+      pending = this.response(path, method, body).then((response) =>
+        response.json(),
+      );
+      LedgerApi.pending.set(path, pending);
+      void pending
+        .finally(() => {
+          if (LedgerApi.pending.get(path) === pending)
+            LedgerApi.pending.delete(path);
+        })
+        .catch(() => {});
+    }
+    return structuredClone(await pending) as T;
   }
   async download(path: string, body: unknown) {
     const response = await this.response(path, "POST", body);
@@ -48,8 +83,7 @@ export class LedgerApi {
     ).toString();
   }
   async transaction(id: number): Promise<Row | undefined> {
-    const rows: Row[] = await this.request("/transactions?audit=true");
-    return rows.find((row) => row.id === id);
+    return this.request(`/transactions/${id}`);
   }
 }
 export class MoneyFormatter {
@@ -61,6 +95,12 @@ export class MoneyFormatter {
   }
   static input(fen: number = 0) {
     return (fen / 100).toFixed(2);
+  }
+}
+/** Presentation-only formatting. Domain calculations/exports use MoneyFormatter. */
+export class DisplayMoneyFormatter extends MoneyFormatter {
+  static format(fen = 0) {
+    return AmountPrivacy.hidden() ? AmountPrivacy.mask : super.format(fen);
   }
 }
 export class CategoryTree {

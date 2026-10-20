@@ -1,44 +1,26 @@
 """Read-only household spending, with explicit exclusions and signed refunds."""
 
+from .report_context import snapshot_rows
+
 from collections import defaultdict
-from datetime import date, timedelta
+from datetime import timedelta
+from .report_context import consistent_read
 from .analysis_scope import AnalysisAccountScope
 from .category_catalog import CategoryGraph
-from .domain import Clock, DomainError
+from .domain import DomainError
 from .models import Entry, Transaction
 from .services import ReportService
 
 
-class AnalysisPeriod:
-    def __init__(self, start=None, end=None):
-        today = Clock.now()[:10]
-        try:
-            self.end = date.fromisoformat(end or today)
-            self.start = date.fromisoformat(
-                start or self.end.replace(day=1).isoformat()
-            )
-            if self.start.isoformat() != (
-                start or self.start.isoformat()
-            ) or self.end.isoformat() != (end or today):
-                raise ValueError()
-        except (TypeError, ValueError):
-            raise DomainError("日期需为 YYYY-MM-DD") from None
-        if self.start > self.end:
-            raise DomainError("开始日期不能晚于结束日期")
-        self.days = (self.end - self.start).days + 1
-        if self.days > 5000:
-            raise DomainError("分析区间过长，请缩短至 5000 天以内")
-        try:
-            self.previous_end = self.start - timedelta(days=1)
-            self.previous_start = self.previous_end - timedelta(days=self.days - 1)
-        except OverflowError:
-            raise DomainError("日期过早，无法计算上期比较") from None
+# Compatibility for integrations importing AnalysisPeriod from this module.
+from .analysis_period import AnalysisPeriod
 
 
 class ExpenseAnalysisService:
     def __init__(self, db):
         self.db = db
 
+    @consistent_read
     def analyze(self, filters=None, large_amount=None, *, use_settings=True):
         filters = filters or {}
         period = AnalysisPeriod(filters.get("start"), filters.get("end"))
@@ -73,7 +55,7 @@ class ExpenseAnalysisService:
             transactions = {t.id: t for t in s.query(Transaction)}
             public = defaultdict(list)
             funding_ids = defaultdict(set)
-            for e in s.query(Entry):
+            for e in snapshot_rows(s, Entry):
                 if accounts.accounts[e.account_id].role == "SYSTEM" and e.category_id:
                     public[e.transaction_id].append(e)
                 elif accounts.accounts[e.account_id].role != "SYSTEM":

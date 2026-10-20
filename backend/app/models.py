@@ -82,6 +82,7 @@ class Transaction(Base):
     reversal_of = Column(Integer, ForeignKey("transactions.id"), unique=True)
     related_id = Column(Integer, ForeignKey("transactions.id"))
     source = Column(String, default="手动")
+    purpose = Column(String, nullable=False, default="GENERAL")
     __table_args__ = (CheckConstraint("status IN ('POSTED','REVERSED')"),)
 
 
@@ -143,6 +144,7 @@ class AccountValuation(Base):
     transaction_id = Column(Integer, ForeignKey("transactions.id"), unique=True)
     idempotency_key = Column(String, nullable=False, unique=True)
     note = Column(Text, default="")
+    revoked_at = Column(String)
 
 
 class Reconciliation(Base):

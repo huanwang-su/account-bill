@@ -1,10 +1,14 @@
+import { MetricCard } from "./MetricCard";
+import { AccountChoices } from "./AccountChoices";
+import { LatestRequest } from "./LatestRequest";
 import { ReportPeriodFilter } from "./ReportPeriodFilter";
 import React from "react";
+import { StatisticTone as Tone } from "./StatisticTone";
+import { AmountInput as InputNumber } from "./AmountInput";
 import {
   Button,
   Card,
   Empty,
-  InputNumber,
   Select,
   Slider,
   Space,
@@ -19,7 +23,7 @@ import {
   AccountGroupTree,
   CategoryTree,
   LedgerApi,
-  MoneyFormatter as Money,
+  DisplayMoneyFormatter as Money,
   Row,
 } from "./api";
 import { Chart } from "./Chart";
@@ -40,7 +44,7 @@ import {
   AnalysisFilterSelection,
 } from "./AnalysisFilterPanel";
 
-import { HouseholdAnalysisReadout as Readout } from "./HouseholdAnalysisReadout";
+import { ReportMetrics as Readout } from "./ReportMetrics";
 
 interface Props {
   groups: Row[];
@@ -62,7 +66,7 @@ interface State {
 }
 export class ExpenseWorkspace extends React.Component<Props, State> {
   api = new LedgerApi();
-  requestVersion = 0;
+  loader = new LatestRequest(this.api);
   detailFocus = new AnalysisDetailFocus();
   state: State = {
     filters: ReportPeriodFilter.defaults(),
@@ -78,12 +82,12 @@ export class ExpenseWorkspace extends React.Component<Props, State> {
     if (previous.refreshKey !== this.props.refreshKey) this.load();
   }
   componentWillUnmount() {
-    this.requestVersion++;
+    this.loader.dispose();
     this.detailFocus.cancel();
   }
   async load(reveal = false) {
     if (!reveal) this.detailFocus.cancel();
-    const version = ++this.requestVersion;
+    const version = this.loader.begin();
     this.setState({ loading: true, detailPeriod: undefined });
     try {
       const report = await this.api.request(
@@ -93,12 +97,12 @@ export class ExpenseWorkspace extends React.Component<Props, State> {
             large_amount: this.state.threshold,
           }),
       );
-      if (version === this.requestVersion)
+      if (this.loader.current(version))
         this.setState({ report, loading: false }, () =>
           this.detailFocus.afterRender(),
         );
     } catch (error) {
-      if (version === this.requestVersion) {
+      if (this.loader.current(version)) {
         this.detailFocus.cancel();
         this.setState({ loading: false });
         message.error(
@@ -350,7 +354,7 @@ export class ExpenseWorkspace extends React.Component<Props, State> {
                   placeholder="全部资金账户"
                   style={{ width: 210 }}
                   value={filters.account_id}
-                  options={this.props.accounts
+                  options={AccountChoices.rank(this.props.accounts)
                     .filter(
                       (a) =>
                         !a.merged_into_id &&
@@ -412,22 +416,31 @@ export class ExpenseWorkspace extends React.Component<Props, State> {
         ) : (
           <Spin spinning={loading}>
             <div className="metrics analysis-metrics">
-              <div className="metric featured">
+              <MetricCard
+                className="metric featured"
+                data-tone={Tone.of(report.expense, "expense")}
+              >
                 <span>家庭净支出</span>
                 <strong>¥ {Money.format(report.expense)}</strong>
                 <small>
                   付款入账 {Money.format(report.paid)} − 独立退款{" "}
                   {Money.format(report.refunds)}
                 </small>
-              </div>
-              <div className="metric">
+              </MetricCard>
+              <MetricCard
+                className="metric"
+                data-tone={Tone.of(report.average_daily, "expense")}
+              >
                 <span>日均开支</span>
                 <strong>¥ {Money.format(report.average_daily)}</strong>
                 <small>
                   {report.days} 天 · {report.count} 笔付款
                 </small>
-              </div>
-              <div className="metric">
+              </MetricCard>
+              <MetricCard
+                className="metric"
+                data-tone={Tone.of(report.change, "expense")}
+              >
                 <span>与上期等长区间比较</span>
                 <strong>
                   {report.change > 0 ? "+" : ""}¥ {Money.format(report.change)}
@@ -435,14 +448,14 @@ export class ExpenseWorkspace extends React.Component<Props, State> {
                 <small>
                   {report.previous_start} 至 {report.previous_end}
                 </small>
-              </div>
-              <div className="metric">
+              </MetricCard>
+              <MetricCard className="metric">
                 <span>大额付款</span>
                 <strong>{report.large_count} 笔</strong>
                 <small>
                   单笔 ≥ ¥ {Money.format(report.large_amount_minor)}
                 </small>
-              </div>
+              </MetricCard>
             </div>
 
             <Card

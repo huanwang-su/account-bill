@@ -1,12 +1,13 @@
 """Configured accounts, independently reconciled to their actual journal balances."""
 
 from collections import defaultdict
+from .report_context import consistent_read
 from .analysis_settings import AnalysisSettingsService
 from .account_config import AccountGraph
 from .category_catalog import CategoryGraph
 from .counterparty_analysis import CounterpartyAnalysisService
-from .expense_analysis import AnalysisPeriod
-from .financial_analysis import FinancialAnalysisService
+from .analysis_period import AnalysisPeriod
+from .analysis_period import PeriodSeries
 from .services import ReportService
 from .domain import DomainError
 
@@ -15,13 +16,15 @@ class SingleAccountAnalysisService:
     def __init__(self, db):
         self.db = db
 
-    def analyze(self, start=None, end=None, account_id=None, *, account_ids=None):
+    @consistent_read
+    def analyze(self, start=None, end=None, account_id=None, *, account_ids=None, summary_only=False):
         period = AnalysisPeriod(start, end)
         start, end = period.start.isoformat(), period.end.isoformat()
         rows = ReportService(self.db).list(dict(start=start, end=end))
         with self.db.read() as session:
             config = AnalysisSettingsService.read_in(session)
             graph = AccountGraph(session)
+            followed_ids = set(config["single_account_ids"])
             ids = (
                 sorted(
                     set(config["single_account_ids"])
@@ -35,6 +38,7 @@ class SingleAccountAnalysisService:
                 if key not in ids:
                     raise DomainError("请先在分析配置中添加该账户")
                 ids = [key]
+            ids = sorted(ids, key=lambda key: (key not in followed_ids, key))
             _, opening = graph.balances(
                 session, period.previous_end.isoformat() + " 23:59:59"
             )
@@ -64,7 +68,7 @@ class SingleAccountAnalysisService:
                     daily[day] += signed
                     if row["kind"] == "OPENING":
                         adjustments += signed
-                    elif row["source"] == "证券余额更新":
+                    elif row.get("purpose") == "VALUATION":
                         valuation += signed
                     elif row["kind"] == "INCOME":
                         income += signed
@@ -90,7 +94,7 @@ class SingleAccountAnalysisService:
                         names.append(" / ".join(categories.path(category.id)))
                         if (
                             not cashflow_enabled
-                            or row["source"] == "证券余额更新"
+                            or row.get("purpose") == "VALUATION"
                             or row["kind"]
                             not in (
                                 "INCOME",
@@ -125,7 +129,7 @@ class SingleAccountAnalysisService:
                     )
                 current = opening.get(key, 0)
                 trend = []
-                for day in FinancialAnalysisService.periods(start, end, "day"):
+                for day in PeriodSeries.values(start, end, "day"):
                     current += daily[day]
                     trend.append(
                         dict(
@@ -146,14 +150,15 @@ class SingleAccountAnalysisService:
                 )
                 counterparties = (
                     CounterpartyAnalysisService(self.db).analyze(
-                        key, dict(start=start, end=end)
+                        key, dict(start=start, end=end), rows=rows
                     )
-                    if mode in ("counterparties", "both")
+                    if not summary_only and mode in ("counterparties", "both")
                     else None
                 )
                 results.append(
                     dict(
                         id=key,
+                        is_followed=key in followed_ids,
                         analysis_mode=mode,
                         name=account.name,
                         kind=account.kind,

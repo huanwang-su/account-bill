@@ -1,6 +1,6 @@
 import React from "react";
 import { Button, Card, Empty, Select, Space } from "antd";
-import { MoneyFormatter as Money, type Row } from "./api";
+import { DisplayMoneyFormatter as Money, type Row } from "./api";
 import { DistributionDiagram } from "./DistributionDiagram";
 import type { SingleAccountSelection } from "./SingleAccountDrilldown";
 import {

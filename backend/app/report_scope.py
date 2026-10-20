@@ -40,17 +40,10 @@ class ReportAccountScope:
             filters.get("exclude_single_accounts"),
             self.config["exclude_single_accounts"],
         )
-        raw = filters.get("excluded_account_ids", [])
-        try:
-            values = json.loads(raw) if isinstance(raw, str) else raw
-            if not isinstance(values, list) or any(
-                type(key) is not int or key <= 0 for key in values
-            ):
-                raise ValueError()
-        except (ValueError, TypeError):
-            raise DomainError("屏蔽账户需为账户编号数组") from None
-        self.specified = set(
-            AnalysisSettingsService.normalize(self.graph, values, strict=True)
+        from .account_selection import AccountSelection
+
+        self.specified = AccountSelection.exclusions(
+            self.graph, filters.get("excluded_account_ids", [])
         )
         self.excluded_ids = set(self.specified)
         if self.exclude_wealth:
@@ -71,6 +64,7 @@ class ReportAccountScope:
             exclude_single_accounts=self.exclude_singles,
             investment_account_ids=sorted(InvestmentScope(self.graph).assets),
             single_excluded_account_ids=self.config["single_excluded_account_ids"],
+            followed_account_ids=self.config["single_account_ids"],
             specified_excluded_account_ids=sorted(self.specified),
             excluded_account_ids=sorted(self.excluded_ids),
         )

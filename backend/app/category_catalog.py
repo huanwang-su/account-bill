@@ -30,7 +30,12 @@ DEFAULT_CATEGORIES = {
 
 class CategoryGraph:
     def __init__(self, session):
-        self.rows = {c.id: c for c in session.query(Category)}
+        cached = session.info.get("category_graph_rows")
+        self.rows = (
+            cached if cached is not None else {c.id: c for c in session.query(Category)}
+        )
+        if session.info.get("read_only"):
+            session.info["category_graph_rows"] = self.rows
 
     def canonical(self, key):
         seen = set()

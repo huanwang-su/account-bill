@@ -1,5 +1,9 @@
+import { MetricCard } from "./MetricCard";
+import { AccountChoices } from "./AccountChoices";
+import { LatestRequest } from "./LatestRequest";
 import { ReportPeriodFilter } from "./ReportPeriodFilter";
 import React from "react";
+import { StatisticTone as Tone } from "./StatisticTone";
 import {
   Alert,
   Button,
@@ -15,7 +19,7 @@ import {
   message,
 } from "antd";
 import dayjs from "dayjs";
-import { LedgerApi, MoneyFormatter as Money, Row } from "./api";
+import { LedgerApi, DisplayMoneyFormatter as Money, Row } from "./api";
 import { Chart } from "./Chart";
 import { PagedTable } from "./PagedTable";
 import { InvestmentFlows } from "./InvestmentFlows";
@@ -50,7 +54,7 @@ interface State {
 
 export class InvestmentWorkspace extends React.Component<Props, State> {
   api = new LedgerApi();
-  requestVersion = 0;
+  loader = new LatestRequest(this.api);
   drillVersion = 0;
   detailVersion = 0;
   state: State = {
@@ -79,12 +83,12 @@ export class InvestmentWorkspace extends React.Component<Props, State> {
     }
   }
   componentWillUnmount() {
-    this.requestVersion++;
+    this.loader.dispose();
     this.drillVersion++;
     this.detailVersion++;
   }
   async load() {
-    const version = ++this.requestVersion;
+    const version = this.loader.begin();
     this.drillVersion++;
     this.detailVersion++;
     this.setState({
@@ -97,7 +101,7 @@ export class InvestmentWorkspace extends React.Component<Props, State> {
         "/reports/investments?" +
           this.api.query({ ...this.state.filters, grain: this.state.grain }),
       );
-      if (version === this.requestVersion)
+      if (this.loader.current(version))
         this.setState({ report, loading: false }, () => {
           if (this.state.drilldown?.level === "account")
             this.loadDrilldown(this.state.drilldown);
@@ -105,7 +109,7 @@ export class InvestmentWorkspace extends React.Component<Props, State> {
             this.setState({ drillReport: report, drillLoading: false });
         });
     } catch (error) {
-      if (version === this.requestVersion) {
+      if (this.loader.current(version)) {
         this.setState({ loading: false, drillLoading: false });
         message.error(
           error instanceof Error ? error.message : "理财收益分析加载失败",
@@ -114,7 +118,7 @@ export class InvestmentWorkspace extends React.Component<Props, State> {
     }
   }
   changeScope(patch: Partial<State>) {
-    this.requestVersion++;
+    this.loader.dispose();
     this.drillVersion++;
     this.detailVersion++;
     this.setState(
@@ -499,10 +503,21 @@ export class InvestmentWorkspace extends React.Component<Props, State> {
                         ["估值盈亏", "valuation_profit"],
                         ["本金净转入", "capital_net"],
                       ].map(([label, key]) => (
-                        <div className="metric" key={key}>
+                        <MetricCard
+                          className="metric"
+                          key={key}
+                          data-tone={Tone.of(
+                            drillReport[key],
+                            key === "ending"
+                              ? "balance"
+                              : key === "capital_net"
+                                ? "transfer"
+                                : "net",
+                          )}
+                        >
                           <span>{label}</span>
                           <strong>¥ {Money.format(drillReport[key])}</strong>
-                        </div>
+                        </MetricCard>
                       ))}
                     </div>
                     <div className="investment-charts mb">
@@ -715,7 +730,12 @@ export class InvestmentWorkspace extends React.Component<Props, State> {
         a.role === "ASSET" &&
         ["证券", "理财"].includes(a.kind),
     );
-    const choices: Row[] = report?.available_accounts || securities;
+    const choices = AccountChoices.rank<Row>(
+      report?.available_accounts || securities,
+      this.props.accounts
+        .filter((account) => account.is_followed)
+        .map((account) => account.id),
+    );
     const selected = choices.find((a) => a.id === filters.account_id);
     const resetKey = JSON.stringify(filters);
     return (
@@ -824,7 +844,10 @@ export class InvestmentWorkspace extends React.Component<Props, State> {
                     />
                   )}
                   <div className="metrics analysis-metrics">
-                    <div className="metric">
+                    <MetricCard
+                      className="metric"
+                      data-tone={Tone.of(report.ending)}
+                    >
                       <span>期末理财资产</span>
                       <strong data-testid="investment-assets">
                         {report.asset_account_count
@@ -834,8 +857,11 @@ export class InvestmentWorkspace extends React.Component<Props, State> {
                       <small>
                         截至 {report.end} · {report.asset_account_count} 个账户
                       </small>
-                    </div>
-                    <div className="metric featured">
+                    </MetricCard>
+                    <MetricCard
+                      className="metric featured"
+                      data-tone={Tone.of(report.profit, "net")}
+                    >
                       <span>期间净收益</span>
                       <strong data-testid="investment-profit">
                         ¥ {Money.format(report.profit)}
@@ -844,8 +870,11 @@ export class InvestmentWorkspace extends React.Component<Props, State> {
                         收益 ¥ {Money.format(report.gain)} · 亏损/费用 ¥{" "}
                         {Money.format(report.loss)}
                       </small>
-                    </div>
-                    <div className="metric">
+                    </MetricCard>
+                    <MetricCard
+                      className="metric"
+                      data-tone={Tone.of(report.valuation_profit, "net")}
+                    >
                       <span>期间估值盈亏</span>
                       <strong data-testid="investment-valuation">
                         ¥ {Money.format(report.valuation_profit)}
@@ -853,8 +882,11 @@ export class InvestmentWorkspace extends React.Component<Props, State> {
                       <small>
                         其他收益/费用净额 ¥ {Money.format(report.other_profit)}
                       </small>
-                    </div>
-                    <div className="metric">
+                    </MetricCard>
+                    <MetricCard
+                      className="metric"
+                      data-tone={Tone.of(report.capital_net, "transfer")}
+                    >
                       <span>期间本金净转入</span>
                       <strong data-testid="investment-capital">
                         ¥ {Money.format(report.capital_net)}
@@ -863,7 +895,7 @@ export class InvestmentWorkspace extends React.Component<Props, State> {
                         银行等转入 ¥ {Money.format(report.capital_in)} · 转出 ¥{" "}
                         {Money.format(report.capital_out)}
                       </small>
-                    </div>
+                    </MetricCard>
                   </div>
 
                   <InvestmentFlows

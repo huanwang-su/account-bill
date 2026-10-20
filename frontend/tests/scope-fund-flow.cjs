@@ -419,6 +419,7 @@ pager.state = { ...pager.state, current: 2 };
 const second = renderToStaticMarkup(pager.render());
 assert.ok(first.includes("分页进出00") && !first.includes("分页进出10"));
 assert.ok(second.includes("分页进出10") && !second.includes("分页进出00"));
+
 if (process.argv[2]) {
   const actual = JSON.parse(fs.readFileSync(process.argv[2]));
   for (const scope of [

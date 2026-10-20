@@ -20,7 +20,7 @@ import {
   WalletOutlined,
   WechatOutlined,
 } from "@ant-design/icons";
-import { AccountGroupTree, MoneyFormatter as Money, Row } from "./api";
+import { AccountGroupTree, DisplayMoneyFormatter as Money, Row } from "./api";
 
 type Scope = number | "all" | "ungrouped";
 interface Props {

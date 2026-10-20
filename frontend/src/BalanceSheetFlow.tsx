@@ -1,6 +1,6 @@
 import React from "react";
 import { Button, Card, Empty } from "antd";
-import { MoneyFormatter as Money, Row } from "./api";
+import { DisplayMoneyFormatter as Money, Row } from "./api";
 import { DistributionDiagram } from "./DistributionDiagram";
 export { distributionOption } from "./DistributionDiagram";
 import {

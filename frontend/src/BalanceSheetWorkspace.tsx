@@ -1,5 +1,8 @@
+import { MetricCard } from "./MetricCard";
+import { LatestRequest } from "./LatestRequest";
 import { ReportPeriodFilter } from "./ReportPeriodFilter";
 import React from "react";
+import { StatisticTone as Tone } from "./StatisticTone";
 import {
   Alert,
   Button,
@@ -25,7 +28,7 @@ import { PagedTable } from "./PagedTable";
 import {
   AccountGroupTree,
   LedgerApi,
-  MoneyFormatter as Money,
+  DisplayMoneyFormatter as Money,
   Row,
 } from "./api";
 
@@ -44,7 +47,7 @@ interface State {
 
 export class BalanceSheetWorkspace extends React.Component<Props, State> {
   api = new LedgerApi();
-  requestVersion = 0;
+  loader = new LatestRequest(this.api);
   state: State = { asOf: dayjs().format("YYYY-MM-DD"), loading: true };
   componentDidMount() {
     this.load();
@@ -53,10 +56,10 @@ export class BalanceSheetWorkspace extends React.Component<Props, State> {
     if (previous.refreshKey !== this.props.refreshKey) this.load();
   }
   componentWillUnmount() {
-    this.requestVersion++;
+    this.loader.dispose();
   }
   async load() {
-    const version = ++this.requestVersion;
+    const version = this.loader.begin();
     this.setState({ loading: true });
     try {
       const snapshot = await this.api.request(
@@ -66,10 +69,10 @@ export class BalanceSheetWorkspace extends React.Component<Props, State> {
             group_id: this.state.groupId,
           }),
       );
-      if (version === this.requestVersion)
+      if (this.loader.current(version))
         this.setState({ snapshot, loading: false });
     } catch (error) {
-      if (version === this.requestVersion) {
+      if (this.loader.current(version)) {
         this.setState({ loading: false });
         message.error(
           error instanceof Error ? error.message : "资产负债表加载失败",
@@ -413,27 +416,36 @@ export class BalanceSheetWorkspace extends React.Component<Props, State> {
           snapshot && (
             <Spin spinning={this.state.loading}>
               <div className="balance-sheet-metrics">
-                <div className="metric">
+                <MetricCard
+                  className="metric"
+                  data-tone={Tone.of(snapshot.assets)}
+                >
                   <span>资产总额</span>
                   <strong data-testid="balance-assets">
                     ¥ {Money.format(snapshot.assets)}
                   </strong>
                   <small>自有资产账户</small>
-                </div>
-                <div className="metric">
+                </MetricCard>
+                <MetricCard
+                  className="metric"
+                  data-tone={Tone.of(snapshot.liabilities, "liability")}
+                >
                   <span>负债总额</span>
                   <strong data-testid="balance-liabilities">
                     ¥ {Money.format(snapshot.liabilities)}
                   </strong>
                   <small>欠款为正数 · 预付款为负数</small>
-                </div>
-                <div className="metric featured">
+                </MetricCard>
+                <MetricCard
+                  className="metric featured"
+                  data-tone={Tone.of(snapshot.net_assets, "net")}
+                >
                   <span>净资产</span>
                   <strong data-testid="balance-net">
                     ¥ {Money.format(snapshot.net_assets)}
                   </strong>
                   <small>资产 − 负债</small>
-                </div>
+                </MetricCard>
               </div>
               {!!snapshot.missing_opening_ids.length && (
                 <Alert

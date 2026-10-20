@@ -1,6 +1,6 @@
 import React from "react";
 import type { EChartsOption } from "echarts";
-import { MoneyFormatter as Money, type Row } from "./api";
+import { DisplayMoneyFormatter as Money, type Row } from "./api";
 import { Chart } from "./Chart";
 import type { AccountDistribution } from "./AccountDistribution";
 export type DistributionData = Pick<

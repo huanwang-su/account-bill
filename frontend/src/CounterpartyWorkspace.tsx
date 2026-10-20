@@ -1,23 +1,28 @@
+import { MetricCard } from "./MetricCard";
+import { AccountChoices } from "./AccountChoices";
+import { LatestRequest } from "./LatestRequest";
 import { ReportPeriodFilter } from "./ReportPeriodFilter";
 import React from "react";
+import { StatisticTone as Tone } from "./StatisticTone";
 import {
   Button,
   Card,
   Drawer,
   Empty,
   Input,
+  Popconfirm,
   Select,
   Space,
   Spin,
   Tag,
   message,
 } from "antd";
-import { LedgerApi, MoneyFormatter as Money, Row } from "./api";
+import { LedgerApi, DisplayMoneyFormatter as Money, Row } from "./api";
 import { Chart } from "./Chart";
 import { PagedTable } from "./PagedTable";
 import { AnalysisDrilldownBar } from "./AnalysisDrilldown";
 
-import { PartyReadoutData } from "./AccountReadoutData";
+import { PartyMetrics as PartyReadoutData } from "./ReportMetrics";
 import { PartyMovement } from "./SingleAccountDrilldown";
 
 interface Props {
@@ -26,6 +31,7 @@ interface Props {
   refreshKey: string;
   onDetail: (row: Row) => void;
   onValuation: (account: Row) => void;
+  onChanged?: () => void;
 }
 type MovementDirection = "incoming" | "outgoing";
 
@@ -44,7 +50,7 @@ interface State {
 
 export class CounterpartyWorkspace extends React.Component<Props, State> {
   api = new LedgerApi();
-  requestVersion = 0;
+  loader = new LatestRequest(this.api);
   detailVersion = 0;
   state: State = {
     accountId: this.props.initialAccountId,
@@ -72,11 +78,11 @@ export class CounterpartyWorkspace extends React.Component<Props, State> {
     else if (previous.refreshKey !== this.props.refreshKey) this.load();
   }
   componentWillUnmount() {
-    this.requestVersion++;
+    this.loader.dispose();
     this.detailVersion++;
   }
   async load() {
-    const version = ++this.requestVersion;
+    const version = this.loader.begin();
     this.detailVersion++;
     const accountId = this.state.accountId;
     if (!accountId) {
@@ -96,7 +102,7 @@ export class CounterpartyWorkspace extends React.Component<Props, State> {
           ? this.api.request(`/accounts/${accountId}/valuations`)
           : Promise.resolve([]),
       ]);
-      if (version === this.requestVersion)
+      if (this.loader.current(version))
         this.setState((state) => {
           const selected = state.selected?.aggregate
             ? PartyMovement.all(report)
@@ -114,7 +120,7 @@ export class CounterpartyWorkspace extends React.Component<Props, State> {
           };
         });
     } catch (error) {
-      if (version === this.requestVersion) {
+      if (this.loader.current(version)) {
         this.setState({ loading: false });
         message.error(
           error instanceof Error ? error.message : "交易方分析加载失败",
@@ -133,6 +139,21 @@ export class CounterpartyWorkspace extends React.Component<Props, State> {
       },
       () => this.load(),
     );
+  }
+  async cancelValuation(row: Row) {
+    try {
+      await this.api.request(
+        `/accounts/${this.state.accountId}/valuations/${row.id}/cancel`,
+        "POST",
+      );
+      await this.load();
+      this.props.onChanged?.();
+      message.success(
+        "估值已撤销，历史记录保留；可补录交易后按时间重新更新余额",
+      );
+    } catch (error) {
+      message.error(error instanceof Error ? error.message : "撤销失败");
+    }
   }
   openParty(
     selected: Row,
@@ -359,7 +380,7 @@ export class CounterpartyWorkspace extends React.Component<Props, State> {
   render() {
     const { report, selected, accountId, filters, query, history, loading } =
       this.state;
-    const accounts = this.props.accounts.filter(
+    const accounts = AccountChoices.rank(this.props.accounts).filter(
       (a) => !a.merged_into_id && ["ASSET", "LIABILITY"].includes(a.role),
     );
     const account = accounts.find((a) => a.id === accountId);
@@ -468,34 +489,43 @@ export class CounterpartyWorkspace extends React.Component<Props, State> {
           report && (
             <Spin spinning={loading}>
               <div className="metrics analysis-metrics">
-                <div className="metric">
+                <MetricCard
+                  className="metric"
+                  data-tone={Tone.of(report.incoming, "income")}
+                >
                   <span>累计收款</span>
                   <strong className="income" data-testid="party-incoming">
                     ¥ {Money.format(report.incoming)}
                   </strong>
                   <small>含退款、转入</small>
-                </div>
-                <div className="metric">
+                </MetricCard>
+                <MetricCard
+                  className="metric"
+                  data-tone={Tone.of(report.outgoing, "expense")}
+                >
                   <span>累计付款</span>
                   <strong data-testid="party-outgoing">
                     ¥ {Money.format(report.outgoing)}
                   </strong>
                   <small>含支出、转出</small>
-                </div>
-                <div className="metric featured">
+                </MetricCard>
+                <MetricCard
+                  className="metric featured"
+                  data-tone={Tone.of(report.net, "net")}
+                >
                   <span>累计净额</span>
                   <strong data-testid="party-net">
                     ¥ {Money.format(report.net)}
                   </strong>
                   <small>收款 − 付款，证券估值另列</small>
-                </div>
-                <div className="metric">
+                </MetricCard>
+                <MetricCard className="metric">
                   <span>交易方 / 交易数</span>
                   <strong data-testid="party-count">
                     {report.party_count} / {report.count}
                   </strong>
                   <small>每笔交易只计一次</small>
-                </div>
+                </MetricCard>
               </div>
 
               <Card
@@ -665,6 +695,22 @@ export class CounterpartyWorkspace extends React.Component<Props, State> {
                     defaultPageSize={10}
                     pageResetKey={String(accountId)}
                     columns={[
+                      {
+                        title: "操作",
+                        render: (_, row) =>
+                          !row.baseline && row.status !== "REVERSED" ? (
+                            <Popconfirm
+                              title="撤销这次估值？请先撤销时间更晚的估值。"
+                              onConfirm={() => this.cancelValuation(row)}
+                            >
+                              <Button size="small" type="link">
+                                撤销估值
+                              </Button>
+                            </Popconfirm>
+                          ) : (
+                            "—"
+                          ),
+                      },
                       { title: "更新时间", dataIndex: "occurred_at" },
                       {
                         title: "更新前余额",

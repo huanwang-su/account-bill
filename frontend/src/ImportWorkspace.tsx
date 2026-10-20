@@ -1,4 +1,5 @@
 import React from "react";
+import { AmountPrivacy } from "./AmountPrivacy";
 import {
   Alert,
   Button,
@@ -21,7 +22,7 @@ import {
   FileDoneOutlined,
 } from "@ant-design/icons";
 import { PagedTable } from "./PagedTable";
-import { LedgerApi, MoneyFormatter as Money, Row } from "./api";
+import { LedgerApi, DisplayMoneyFormatter as Money, Row } from "./api";
 
 const statuses: Row = {
   NORMALIZED: ["待分类", "blue"],
@@ -693,7 +694,9 @@ export class ImportWorkspace extends React.Component<Props, State> {
               fontSize: 12,
             }}
           >
-            {preview?.text}
+            {AmountPrivacy.hidden()
+              ? "金额已隐藏，显示金额后可预览账单文件。"
+              : preview?.text}
           </pre>
         </Modal>
       </div>

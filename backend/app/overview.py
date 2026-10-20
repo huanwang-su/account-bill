@@ -1,7 +1,9 @@
 """Unfiltered family snapshot and month-to-date household activity."""
 
+from .report_context import consistent_read
 from .balance_sheet import BalanceSheetService
-from .expense_analysis import AnalysisPeriod, ExpenseAnalysisService
+from .analysis_period import AnalysisPeriod
+from .expense_analysis import ExpenseAnalysisService
 from .investment_analysis import InvestmentAnalysisService
 from .services import ReportService
 from .bills import BillService
@@ -17,6 +19,7 @@ class OverviewService:
     def __init__(self, db):
         self.db = db
 
+    @consistent_read
     def details(
         self,
         section,
@@ -99,6 +102,7 @@ class OverviewService:
             basis="overview_direct_group_balance",
         )
 
+    @consistent_read
     def snapshot(self, as_of=None, filters=None):
         filters = filters or {}
         modern = bool(filters) or as_of is None
@@ -115,17 +119,13 @@ class OverviewService:
         income_report = (
             IncomeAnalysisService(self.db).analyze(request) if modern else None
         )
-        investments = InvestmentAnalysisService(self.db).analyze(start=start, end=day)
-        investment_report = (
-            InvestmentAnalysisService(self.db).analyze(
-                start=start, end=day, grain="day"
-            )
-            if modern
-            else None
+        investments = InvestmentAnalysisService(self.db).analyze(
+            start=start, end=day, grain="day" if modern else "month"
         )
+        investment_report = investments if modern else None
         singles = (
             SingleAccountAnalysisService(self.db).analyze(
-                start, day, account_ids=scope.config["single_account_ids"]
+                start, day, account_ids=scope.config["single_account_ids"], summary_only=True
             )
             if modern
             else None
@@ -169,7 +169,7 @@ class OverviewService:
                 if latest
                 else None
             )
-        pending = len(BillService(self.db).list(dict(ledger_status="PENDING")))
+        pending = BillService(self.db).pending_count()
         return dict(
             as_of=day,
             period=(
@@ -179,8 +179,14 @@ class OverviewService:
             ),
             account_scope=scope.projection(),
             balance_sheet=balance,
-            income_report=income_report,
-            investment_report=investment_report,
+            income_report=(
+                {key: income_report[key] for key in ("income", "count", "trend", "categories")}
+                if income_report else None
+            ),
+            investment_report=(
+                {key: investment_report[key] for key in ("profit", "ending", "capital_in", "capital_out", "account_count", "trend")}
+                if investment_report else None
+            ),
             single_accounts=singles,
             month_start=start,
             assets=balance["assets"],

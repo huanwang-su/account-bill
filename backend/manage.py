@@ -22,24 +22,11 @@ class BackupManager:
                 raise ValueError("备份文件损坏")
             if c.execute("PRAGMA foreign_key_check").fetchone():
                 raise ValueError("备份存在关联错误")
-            if c.execute("SELECT version_num FROM alembic_version").fetchone()[
-                0
-            ] not in (
-                "001",
-                "002",
-                "003",
-                "004",
-                "005",
-                "006",
-                "007",
-                "008",
-                "009",
-                "010",
-                "011",
-                "012",
-                "013",
-                "014",
-                "015",
+            from app.schema_versions import SchemaVersions
+
+            if (
+                c.execute("SELECT version_num FROM alembic_version").fetchone()[0]
+                not in SchemaVersions.known()
             ):
                 raise ValueError("不支持的备份版本")
             if c.execute(

@@ -1,14 +1,6 @@
 import React from "react";
-import {
-  Button,
-  Card,
-  InputNumber,
-  Select,
-  Space,
-  Switch,
-  Segmented,
-  message,
-} from "antd";
+import { AmountInput as InputNumber } from "./AmountInput";
+import { Button, Card, Select, Space, Switch, Segmented, message } from "antd";
 import { LedgerApi, Row } from "./api";
 import { PagedTable } from "./PagedTable";
 import { SingleAccountPresentation } from "./SingleAccountPresentation";

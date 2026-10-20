@@ -2,6 +2,7 @@
 
 from collections import defaultdict
 from datetime import date, timedelta
+from .report_context import consistent_read
 from .domain import DomainError
 from .category_catalog import CategoryGraph
 from .services import ReportService
@@ -16,25 +17,10 @@ class FinancialAnalysisService:
 
     @staticmethod
     def periods(start, end, grain):
-        first, last = date.fromisoformat(start[:10]), date.fromisoformat(end[:10])
-        if grain == "month":
-            first, last = first.replace(day=1), last.replace(day=1)
-        values = []
-        while first <= last:
-            if len(values) >= 5000:
-                raise DomainError("趋势范围过长，请缩短日期范围或切换为按月分析")
-            values.append(
-                first.isoformat()[:7] if grain == "month" else first.isoformat()
-            )
-            if first == last:
-                break
-            first = (
-                date(first.year + (first.month == 12), first.month % 12 + 1, 1)
-                if grain == "month"
-                else first + timedelta(days=1)
-            )
-        return values
+        from .analysis_period import PeriodSeries
+        return PeriodSeries.values(start, end, grain)
 
+    @consistent_read
     def analyze(
         self,
         filters=None,

@@ -1,7 +1,8 @@
 """Income-only reporting over effective journal transactions, without principal flows."""
 
+from .report_context import consistent_read
 from .analysis_scope import AnalysisAccountScope
-from .expense_analysis import AnalysisPeriod
+from .analysis_period import AnalysisPeriod
 from .financial_analysis import FinancialAnalysisService
 from .category_catalog import CategoryGraph
 from .domain import DomainError
@@ -11,6 +12,7 @@ class IncomeAnalysisService:
     def __init__(self, db):
         self.db = db
 
+    @consistent_read
     def analyze(self, filters=None, grain="day", level=1, large_amount=None):
         filters = dict(filters or {})
         period = AnalysisPeriod(filters.get("start"), filters.get("end"))

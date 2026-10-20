@@ -1,0 +1,53 @@
+/* Explicit chart selections reveal their local result scope. */
+.analysis-drilldown-bar[data-detail-selected="true"] {
+  border-left: 3px solid var(--primary);
+  background: var(--surface-muted);
+}
+.analysis-drilldown-bar {
+  scroll-margin-top: 20px;
+}
+/* Actual cross-boundary inflows/outflows, independent of category filters. */
+.scope-fund-flow-section {
+  min-width: 0;
+}
+.scope-fund-flow-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+.scope-fund-flow-controls > .ant-select:first-child {
+  width: 170px;
+}
+.scope-fund-flow-controls > .ant-select:nth-child(2) {
+  width: 350px;
+}
+.scope-fund-flow-controls > span {
+  margin-left: auto;
+  color: var(--muted);
+  font-size: 12px;
+}
+.scope-fund-flow-rule {
+  margin: 0 0 16px;
+  padding: 10px 14px;
+  border-left: 3px solid var(--primary);
+  background: var(--surface-muted);
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.8;
+}
+.scope-fund-flow-chart {
+  padding-top: 16px;
+  margin-top: 18px;
+  border-top: 1px solid var(--border);
+}
+.scope-fund-flow-chart h3 {
+  margin: 0 0 12px;
+  color: var(--text);
+  font-size: 15px;
+  font-weight: 550;
+}
+.scope-fund-flow-section .analysis-drilldown-bar {
+  margin-top: 20px;
+}

@@ -57,6 +57,9 @@ def test_first_balance_is_opening_then_gain_loss_and_zero_audit(ledger):
         assert s.get(Transaction, gain["transaction_id"]).kind == "INCOME"
         assert s.get(Transaction, loss["transaction_id"]).kind == "EXPENSE"
         assert sum(e.amount for e in s.query(Entry)) == 0
+    with pytest.raises(DomainError, match="已有证券估值"):
+        TransactionService(db).reverse(loss["transaction_id"])
+    SecuritiesValuationService(db).cancel(stock, same["id"])
     TransactionService(db).reverse(loss["transaction_id"])
     assert balance(db, stock) == 120000
     assert SecuritiesValuationService(db).history(stock)[1]["status"] == "REVERSED"

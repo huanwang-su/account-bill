@@ -1,3 +1,4 @@
+import { TransactionSemantics } from "./TransactionSemantics";
 import type { Row } from "./api";
 
 /** The reconciliation view follows its transaction filters, including valuation. */
@@ -18,8 +19,9 @@ export class ReportDetailReading {
   }
 
   get valuationCount() {
-    return this.transactions.filter((row) => row.source === "证券余额更新")
-      .length;
+    return this.transactions.filter((row) =>
+      TransactionSemantics.isValuation(row),
+    ).length;
   }
 
   get categoriesByImpact(): Row[] {

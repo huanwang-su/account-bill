@@ -37,7 +37,7 @@ class FundFlowService:
             return "REVERSED"
         if transaction.kind == "OPENING":
             return "OPENING"
-        if transaction.source == "证券余额更新":
+        if transaction.purpose == "VALUATION":
             return "VALUATION"
         if transaction.kind == "ADJUSTMENT":
             return "ADJUSTMENT"

@@ -1,5 +1,10 @@
+import { TransactionSemantics } from "./TransactionSemantics";
+import { MetricCard } from "./MetricCard";
+import { AccountChoices } from "./AccountChoices";
+import { LatestRequest } from "./LatestRequest";
 import { ReportPeriodFilter } from "./ReportPeriodFilter";
 import React from "react";
+import { StatisticTone as Tone } from "./StatisticTone";
 import {
   Button,
   Card,
@@ -12,14 +17,15 @@ import {
   message,
 } from "antd";
 import dayjs from "dayjs";
-import { LedgerApi, MoneyFormatter as Money, Row } from "./api";
+import { LedgerApi, DisplayMoneyFormatter as Money, Row } from "./api";
 import { SingleAccountPresentation as Presentation } from "./SingleAccountPresentation";
 import { Chart } from "./Chart";
 import { PagedTable } from "./PagedTable";
 import { AnalysisDrilldownBar } from "./AnalysisDrilldown";
 import { AnalysisDetailFocus } from "./AnalysisDetailFocus";
 import { SingleAccountFlow } from "./SingleAccountFlow";
-import { PartyReadoutData } from "./AccountReadoutData";
+import { CounterpartyMovementChart } from "./CounterpartyMovementChart";
+import { PartyMetrics as PartyReadoutData } from "./ReportMetrics";
 import {
   AccountFlow,
   PartyMovement,
@@ -47,7 +53,7 @@ interface State {
 export class SingleAccountWorkspace extends React.Component<Props, State> {
   api = new LedgerApi();
   detailFocus = new AnalysisDetailFocus();
-  requestVersion = 0;
+  loader = new LatestRequest(this.api);
   state: State = {
     filters: this.props.initialFilters || ReportPeriodFilter.defaults(),
     selected: this.props.initialAccountId
@@ -78,18 +84,18 @@ export class SingleAccountWorkspace extends React.Component<Props, State> {
     } else if (previous.refreshKey !== this.props.refreshKey) this.load();
   }
   componentWillUnmount() {
-    this.requestVersion++;
+    this.loader.dispose();
     this.detailFocus.cancel();
   }
   async load() {
     this.detailFocus.cancel();
-    const version = ++this.requestVersion;
+    const version = this.loader.begin();
     this.setState({ loading: true });
     try {
       const report = await this.api.request(
         "/reports/single-accounts?" + this.api.query(this.state.filters),
       );
-      if (version === this.requestVersion)
+      if (this.loader.current(version))
         this.setState((state) => {
           const account =
             report.accounts.find((a: Row) => String(a.id) === state.selected) ||
@@ -118,7 +124,7 @@ export class SingleAccountWorkspace extends React.Component<Props, State> {
           };
         });
     } catch (e) {
-      if (version === this.requestVersion) {
+      if (this.loader.current(version)) {
         this.setState({ loading: false });
         message.error(e instanceof Error ? e.message : "单账户分析加载失败");
       }
@@ -448,6 +454,12 @@ export class SingleAccountWorkspace extends React.Component<Props, State> {
   renderCounterparties(account: Row, reset: string) {
     return (
       <>
+        <CounterpartyMovementChart
+          key={account.id}
+          account={account}
+          loading={this.state.loading}
+          onSelect={(scope) => this.selectDetails(scope, true, "parties")}
+        />
         <SingleAccountFlow
           account={account}
           mode="counterparties"
@@ -592,7 +604,7 @@ export class SingleAccountWorkspace extends React.Component<Props, State> {
               render: (_, r) => (
                 <>
                   <Tag>
-                    {r.source === "证券余额更新" && r.kind !== "OPENING"
+                    {TransactionSemantics.isValuation(r) && r.kind !== "OPENING"
                       ? "证券估值"
                       : (
                           {
@@ -673,28 +685,40 @@ export class SingleAccountWorkspace extends React.Component<Props, State> {
     return (
       <div className="single-account-detail">
         <div className="metrics analysis-metrics">
-          <div className="metric">
+          <MetricCard
+            className="metric"
+            data-tone={Tone.of(account.opening_balance)}
+          >
             <span>期初账面余额</span>
             <strong>¥ {Money.format(account.opening_balance)}</strong>
             <small>开始日期之前的累计余额</small>
-          </div>
-          <div className="metric featured">
+          </MetricCard>
+          <MetricCard
+            className="metric featured"
+            data-tone={Tone.of(account.ending_balance)}
+          >
             <span>期末账面余额</span>
             <strong>¥ {Money.format(account.ending_balance)}</strong>
             <small>
               {account.reconciled ? "已与账户流水核对" : "请核对账户流水"}
             </small>
-          </div>
-          <div className="metric">
+          </MetricCard>
+          <MetricCard
+            className="metric"
+            data-tone={Tone.of(account.change, "net")}
+          >
             <span>期间余额变化</span>
             <strong>¥ {Money.format(account.change)}</strong>
             <small>{account.count} 笔有效变动</small>
-          </div>
-          <div className="metric">
+          </MetricCard>
+          <MetricCard
+            className="metric"
+            data-tone={Tone.of(account.valuation_profit, "net")}
+          >
             <span>证券估值盈亏</span>
             <strong>¥ {Money.format(account.valuation_profit)}</strong>
             <small>本金转入、转出不计为盈亏</small>
-          </div>
+          </MetricCard>
         </div>
         <p className="muted single-account-caption">
           以上概览为完整账户在所选日期的余额与变动，不随局部明细筛选改变。
@@ -775,7 +799,7 @@ export class SingleAccountWorkspace extends React.Component<Props, State> {
   }
   render() {
     const { report, loading, filters, search } = this.state;
-    const accounts: Row[] = report?.accounts || [];
+    const accounts = AccountChoices.rank<Row>(report?.accounts || []);
     const account =
       accounts.find((item) => String(item.id) === this.state.selected) ||
       accounts[0];
@@ -868,7 +892,10 @@ export class SingleAccountWorkspace extends React.Component<Props, State> {
                               </span>
                             </span>
                             <span className="single-account-option-secondary">
-                              <Tag>{Presentation.label(item)}</Tag>
+                              <span>
+                                {item.is_followed && <Tag color="gold">关注</Tag>}
+                                <Tag>{Presentation.label(item)}</Tag>
+                              </span>
                               <span className="single-account-option-change">
                                 <span>期间变化</span>
                                 <strong>

@@ -1,0 +1,261 @@
+/* Complete account-period movement analysis. */
+.account-movement-section {
+  display: grid;
+  gap: 16px;
+  min-width: 0;
+  margin: 24px 0;
+}
+.account-movement-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+.account-movement-heading h2 {
+  margin: 0;
+  color: var(--text);
+  font-size: 18px;
+  font-weight: 600;
+}
+.account-movement-heading p {
+  margin: 5px 0 0;
+  color: var(--muted);
+  font-size: 12px;
+}
+.account-movement-heading > span {
+  flex-shrink: 0;
+  color: var(--muted);
+  font-size: 12px;
+}
+.account-movement-scope,
+.account-movement-description,
+.account-movement-table-note {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.8;
+}
+.account-movement-ignored {
+  margin: 0;
+  padding: 10px 12px;
+  border-left: 3px solid var(--primary);
+  border-radius: 0 6px 6px 0;
+  background: var(--surface-muted);
+  color: var(--text);
+  font-size: 12px;
+  line-height: 1.8;
+}
+.account-movement-summary {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+.account-movement-stat {
+  min-width: 0;
+  padding: 15px 18px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface);
+}
+.account-movement-stat > span {
+  color: var(--muted);
+  font-size: 12px;
+}
+.account-movement-stat-value {
+  display: block;
+  max-width: 100%;
+  margin: 9px 0 7px;
+  overflow-x: auto;
+  color: var(--text);
+  font-size: clamp(20px, 1.75vw, 27px);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.3;
+  white-space: nowrap;
+  scrollbar-width: thin;
+}
+.account-movement-stat > small {
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.7;
+}
+.account-movement-flow,
+.account-movement-details {
+  min-width: 0;
+}
+.account-movement-flow .balance-flow-scroll {
+  margin-top: 8px;
+}
+.account-movement-details .ant-card-extra > .ant-select {
+  min-width: 210px;
+}
+.account-movement-details .analysis-drilldown-bar {
+  margin-top: 0;
+}
+.account-movement-table-note {
+  margin: 10px 0;
+}
+.account-movement-details > .ant-card-body > .account-movement-description {
+  margin-top: 12px;
+}
+.account-movement-account > strong {
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 550;
+  overflow-wrap: anywhere;
+}
+.account-movement-account > div:empty {
+  display: none;
+}
+.account-movement-account .ant-tag {
+  margin-top: 5px;
+  font-size: 11px;
+}
+.account-movement-type {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 5px 8px;
+}
+.account-movement-type .ant-tag {
+  margin: 0;
+}
+.account-movement-money {
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.account-movement-money.is-negative {
+  color: var(--negative);
+}
+.account-movement-breakdown {
+  padding: 4px 12px 8px;
+}
+.account-movement-equation {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+  margin: 0 0 12px;
+  color: var(--text);
+  font-size: 12px;
+  line-height: 1.8;
+  font-variant-numeric: tabular-nums;
+}
+.account-movement-equation > strong {
+  font-weight: 550;
+}
+.account-movement-equation .ant-tag {
+  margin: 0;
+}
+.account-movement-position-equation {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 14px 20px;
+  padding: 16px 20px;
+  margin: 14px 0;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface);
+  color: var(--muted);
+  font-size: 13px;
+}
+.account-movement-position-equation strong {
+  color: var(--text);
+  margin-left: 8px;
+  font-variant-numeric: tabular-nums;
+}
+.account-movement-position-equation small {
+  flex-basis: 100%;
+}
+.account-movement-breakdown-scroll {
+  overflow-x: auto;
+}
+.account-movement-breakdown table {
+  width: 100%;
+  min-width: 600px;
+  border-collapse: collapse;
+  color: var(--text);
+  font-size: 12px;
+}
+.account-movement-breakdown caption {
+  padding: 0 0 9px;
+  color: var(--muted);
+  text-align: left;
+  font-size: 12px;
+}
+.account-movement-breakdown th,
+.account-movement-breakdown td {
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--border);
+  text-align: right;
+}
+.account-movement-breakdown th {
+  font-weight: 500;
+}
+.account-movement-breakdown thead th {
+  color: var(--muted);
+}
+.account-movement-breakdown tr > :first-child {
+  text-align: left;
+}
+.account-movement-breakdown tbody tr:last-child > * {
+  border-bottom: 0;
+}
+@media (max-width: 900px) {
+  .account-movement-summary {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .account-movement-details .ant-card-head-wrapper {
+    flex-wrap: wrap;
+    gap: 8px;
+    padding-block: 12px;
+  }
+}
+.account-movement-opening {
+  margin: 0;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.8;
+}
+.account-movement-composite {
+  margin-bottom: 14px;
+}
+.account-movement-composite > p {
+  margin: 0 0 8px;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.8;
+}
+.account-movement-composite dl {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 24px;
+  margin: 0;
+}
+.account-movement-composite dl > div {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 10px;
+  font-size: 12px;
+}
+.account-movement-composite dt {
+  color: var(--muted);
+}
+.account-movement-composite dd {
+  margin: 0;
+  font-variant-numeric: tabular-nums;
+}
+.account-movement-table-note {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px 18px;
+}
+.account-movement-table-note strong {
+  margin-left: 4px;
+  color: var(--text);
+  font-weight: 550;
+}
