@@ -48,7 +48,7 @@ export class Appearance {
     return mode === "system" ? (dark ? "dark" : "forest") : mode;
   }
   static isDark(mode: ResolvedAppearance) {
-    return mode === "dark";
+    return mode === "dark" || mode === "midnight";
   }
   static colors(mode: ResolvedAppearance) {
     return appearancePalettes[mode].colors;

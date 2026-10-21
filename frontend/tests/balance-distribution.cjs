@@ -1088,6 +1088,8 @@ assert.equal(SingleAccountPresentation.mode({}), "both");
 assert.equal(Appearance.resolve("system", true), "dark");
 assert.equal(Appearance.resolve("system", false), "forest");
 assert.equal(Appearance.valid("invalid"), false);
+assert.equal(Appearance.isDark("midnight"), true);
+assert.equal(Appearance.isDark("rose"), false);
 const originalStorage = global.localStorage;
 const savedAppearance = new Map();
 global.localStorage = {
@@ -1243,7 +1245,7 @@ liveChart.chart = echarts.init(null, undefined, {
   height: 260,
 });
 const sameCanvas = liveChart.chart;
-for (const resolved of ["forest", "violet", "dark", "ocean"]) {
+for (const resolved of ["forest", "violet", "dark", "ocean", "rose", "midnight"]) {
   liveChart.context = { resolved, reducedMotion: false };
   liveChart.draw();
   assert.equal(
@@ -1291,7 +1293,7 @@ for (const { value: mode } of Appearance.options) {
         /class="appearance-preview(?: appearance-preview-system)?"/g,
       ) || []
     ).length,
-    7,
+    9,
   );
   for (const { label } of Appearance.options) assert.ok(html.includes(label));
 }
@@ -1468,7 +1470,7 @@ function verifyWorkspaceEntrance() {
 }
 verifyWorkspaceEntrance();
 console.log(
-  "Six coordinated palettes, theme previews, caption contrast and state-preserving reduced motion passed.",
+  "Eight coordinated palettes, theme previews, caption contrast and state-preserving reduced motion passed.",
 );
 const heading = new WorkspaceHeader({
   title: "收入分析",

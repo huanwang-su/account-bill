@@ -1,5 +1,5 @@
 export type ResolvedAppearance =
-  "forest" | "blue" | "warm" | "violet" | "ocean" | "dark";
+  "forest" | "blue" | "warm" | "violet" | "ocean" | "rose" | "dark" | "midnight";
 export type AppearanceMode = ResolvedAppearance | "system";
 
 export interface AppearanceColors {
@@ -137,6 +137,23 @@ export const appearancePalettes: Record<ResolvedAppearance, AppearancePalette> =
         shadow: "0 6px 20px #1b51570b",
       }),
     },
+    rose: {
+      label: "樱霞",
+      description: "柔和玫瑰，轻盈温润",
+      colors: colors({
+        ...lightSemantics,
+        primary: "#a44863",
+        text: "#42303a",
+        muted: "#78606b",
+        canvas: "#faf3f5",
+        soft: "#f6e9ee",
+        border: "#ecdce3",
+        hero: "#73394e",
+        heroEnd: "#934a61",
+        heroMuted: "#f8e5ed",
+        shadow: "0 6px 20px #75394e0b",
+      }),
+    },
     dark: {
       label: "深色",
       description: "低亮背景，夜间舒适",
@@ -158,6 +175,29 @@ export const appearancePalettes: Record<ResolvedAppearance, AppearancePalette> =
         warning: "#ddbd82",
         expense: "#d8b18b",
         shadow: "0 6px 20px #00000029",
+      }),
+    },
+    midnight: {
+      label: "午夜蓝",
+      description: "沉静蓝夜，专注清晰",
+      colors: colors({
+        primary: "#90b5f0",
+        text: "#e5ecf8",
+        muted: "#a5b5d0",
+        canvas: "#101625",
+        surface: "#192338",
+        soft: "#23314a",
+        border: "#354763",
+        hero: "#253f69",
+        heroEnd: "#314d79",
+        heroMuted: "#e2ebfb",
+        onAccent: "#f5f8ff",
+        onPrimary: "#12213a",
+        positive: "#89ceaa",
+        negative: "#f0a0a7",
+        warning: "#dfc28d",
+        expense: "#dabb96",
+        shadow: "0 6px 20px #00000033",
       }),
     },
   };
